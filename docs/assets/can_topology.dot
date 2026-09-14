@@ -1,0 +1,109 @@
+// DM10 CAN 总线拓扑
+// 数据来源：达妙官方接线图（bipedal-robot/硬件/硬件接线图/orin主控硬件接线图.png）
+//           + roboparty_deploy/src/inference/robots/dm10/robot.yaml 实测
+// 生成：dot -Tpng can_topology.dot -o can_topology.png
+//       dot -Tsvg can_topology.dot -o can_topology.svg
+
+digraph CAN_Topology {
+  graph [
+    fontname="Noto Sans CJK SC",
+    fontsize=15,
+    bgcolor="white",
+    rankdir=TB,
+    nodesep=0.30,
+    ranksep=0.50,
+    pad=0.4,
+    splines=polyline,
+    label="DM10 CAN 总线拓扑\ncan2 = 左腿（ID 1-5） · can1 = 右腿（ID 1-5） · 仲裁域 1 Mbps",
+    labelloc="t"
+  ];
+
+  node [
+    fontname="Noto Sans CJK SC",
+    fontsize=11,
+    shape=box,
+    style="rounded,filled",
+    penwidth=1.2,
+    width=1.1
+  ];
+
+  edge [
+    fontname="Noto Sans CJK SC",
+    fontsize=9,
+    penwidth=1.4
+  ];
+
+  // ══ 中枢与主控 ══════════════════════════════════════
+  HOST [
+    label="主控\nRDK X5",
+    fillcolor="#E1BEE7", color="#6A1B9A", penwidth=1.6, width=0.9
+  ];
+  MCU [
+    label="DM-MC02 开发板\n（CAN 集线中枢）",
+    fillcolor="#FFE0B2", color="#E65100", penwidth=2.2, fontsize=12, width=1.9
+  ];
+
+  // ══ 电源支线（放右侧，独立成链）════════════════════
+  BAT [label="24V 电池", fillcolor="#FFCDD2", color="#B71C1C", width=1.1];
+  PDB [label="下肢分电板", fillcolor="#FFCDD2", color="#B71C1C", width=1.2];
+
+  // ══ 左腿 · CAN2 ═════════════════════════════════════
+  subgraph cluster_left {
+    label="左腿 · CAN2";
+    fontname="Noto Sans CJK SC"; fontsize=13;
+    color="#1565C0"; style="rounded,dashed"; penwidth=1.8;
+
+    L1 [label="ID 1", fillcolor="#BBDEFB", color="#1565C0", width=0.7, height=0.45]
+    L2 [label="ID 2", fillcolor="#BBDEFB", color="#1565C0", width=0.7, height=0.45]
+    L3 [label="ID 3", fillcolor="#BBDEFB", color="#1565C0", width=0.7, height=0.45]
+    L4 [label="ID 4", fillcolor="#BBDEFB", color="#1565C0", width=0.7, height=0.45]
+    L5 [label="ID 5", fillcolor="#BBDEFB", color="#1565C0", width=0.7, height=0.45]
+    LTR [label="120Ω 终端电阻", fillcolor="#FFF9C4", color="#F57F17",
+         style="filled", fontsize=9, width=1.3, height=0.4, shape=box]
+
+    L1 -> L2 -> L3 -> L4 -> L5 [color="#1565C0", penwidth=1.5, weight=10];
+    L5 -> LTR [color="#F57F17", penwidth=2.0, style=bold, weight=10];
+    { rank=same; L1; L2; L3; L4; L5; LTR; }
+  }
+
+  // ══ 右腿 · CAN1 ═════════════════════════════════════
+  subgraph cluster_right {
+    label="右腿 · CAN1";
+    fontname="Noto Sans CJK SC"; fontsize=13;
+    color="#2E7D32"; style="rounded,dashed"; penwidth=1.8;
+
+    R1 [label="ID 1", fillcolor="#C8E6C9", color="#2E7D32", width=0.7, height=0.45]
+    R2 [label="ID 2", fillcolor="#C8E6C9", color="#2E7D32", width=0.7, height=0.45]
+    R3 [label="ID 3", fillcolor="#C8E6C9", color="#2E7D32", width=0.7, height=0.45]
+    R4 [label="ID 4", fillcolor="#C8E6C9", color="#2E7D32", width=0.7, height=0.45]
+    R5 [label="ID 5", fillcolor="#C8E6C9", color="#2E7D32", width=0.7, height=0.45]
+    RTR [label="120Ω 终端电阻", fillcolor="#FFF9C4", color="#F57F17",
+         style="filled", fontsize=9, width=1.3, height=0.4, shape=box]
+
+    R1 -> R2 -> R3 -> R4 -> R5 [color="#2E7D32", penwidth=1.5, weight=10];
+    R5 -> RTR [color="#F57F17", penwidth=2.0, style=bold, weight=10];
+    { rank=same; R1; R2; R3; R4; R5; RTR; }
+  }
+
+  // ══ 脊柱连接 ═════════════════════════════════════════
+  HOST -> MCU [label="USB", color="#6A1B9A", penwidth=1.6];
+
+  MCU -> L1 [label="CAN2", color="#1565C0", penwidth=2.4, fontsize=11];
+  MCU -> R1 [label="CAN1", color="#2E7D32", penwidth=2.4, fontsize=11];
+
+  BAT -> PDB [color="#B71C1C", penwidth=1.6];
+  PDB -> MCU [label="24V", color="#B71C1C", penwidth=1.6, style=dashed];
+
+  // ══ 关键提醒 ═════════════════════════════════════════
+  NOTE [
+    label="⚠️ 电气要点\n\n① 每条腿末端各 1 个 120Ω，共 2 个\n② 反馈帧仲裁 ID 恒为 0x000，\n   电机身份在 D0 低 4 位\n③ txqueuelen 必须设 1000\n   （默认 10 太浅，高频发帧会丢）\n④ 波特率 1 Mbps，必须与电机一致",
+    shape=note,
+    fillcolor="#FFFDE7",
+    color="#9E9E9E",
+    fontsize=10,
+    style="filled",
+    width=2.9
+  ];
+
+  { rank=same; BAT; PDB; }
+}

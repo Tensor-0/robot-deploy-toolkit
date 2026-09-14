@@ -1,8 +1,13 @@
-// DM10 CAN 总线拓扑
-// 数据来源：达妙官方接线图（bipedal-robot/硬件/硬件接线图/orin主控硬件接线图.png）
-//           + roboparty_deploy/src/inference/robots/dm10/robot.yaml 实测
-// 生成：dot -Tpng can_topology.dot -o can_topology.png
-//       dot -Tsvg can_topology.dot -o can_topology.svg
+// Roboto Origin 二次开发项目 · CAN 拓扑
+//
+// ⚠️ 本项目是【二次开发】—— 基于 Roboparty/roboparty_deploy @ a8a0f15
+//    硬件边界：RDK X5 + DM-USB2FDCAN + 纯下肢 10 关节（无手臂、无腰）
+//    ⬇️ 本图只画【我们实际有的】，官方整机的臂/腰不在本项目中
+//
+// 数据来源：roboparty_deploy/src/inference/robots/dm10/robot.yaml（实测）
+//           + rdk-roboparty-integration/README.md（上游基线与 4 个适配点）
+// 生成：dot -Tsvg can_topology.dot -o can_topology.svg
+//       dot -Tpng can_topology.dot -o can_topology.png
 
 digraph CAN_Topology {
   graph [
@@ -10,11 +15,11 @@ digraph CAN_Topology {
     fontsize=15,
     bgcolor="white",
     rankdir=TB,
-    nodesep=0.30,
-    ranksep=0.50,
+    nodesep=0.32,
+    ranksep=0.52,
     pad=0.4,
     splines=polyline,
-    label="DM10 CAN 总线拓扑\ncan2 = 左腿（ID 1-5） · can1 = 右腿（ID 1-5） · 仲裁域 1 Mbps",
+    label="CAN 总线拓扑（二次开发：RDK X5 + DM-USB2FDCAN + 纯下肢 10 关节）\ncan2 = 左腿（ID 1-5） · can1 = 右腿（ID 1-5） · 仲裁域 1 Mbps",
     labelloc="t"
   ];
 
@@ -33,24 +38,30 @@ digraph CAN_Topology {
     penwidth=1.4
   ];
 
-  // ══ 中枢与主控 ══════════════════════════════════════
+  // ══ 主控与转换器（我们实际用的）══════════════════════
   HOST [
     label="主控\nRDK X5",
-    fillcolor="#E1BEE7", color="#6A1B9A", penwidth=1.6, width=0.9
+    fillcolor="#E1BEE7", color="#6A1B9A", penwidth=1.8, width=1.0
   ];
-  MCU [
-    label="DM-MC02 开发板\n（CAN 集线中枢）",
-    fillcolor="#FFE0B2", color="#E65100", penwidth=2.2, fontsize=12, width=1.9
+  FDCAN [
+    label="DM-USB2FDCAN\n（双通道 USB-CAN）",
+    fillcolor="#FFE0B2", color="#E65100", penwidth=2.2, fontsize=11.5, width=1.9
   ];
 
-  // ══ 电源支线（放右侧，独立成链）════════════════════
-  BAT [label="24V 电池", fillcolor="#FFCDD2", color="#B71C1C", width=1.1];
-  PDB [label="下肢分电板", fillcolor="#FFCDD2", color="#B71C1C", width=1.2];
+  // ══ IMU（串口，不经 CAN）═════════════════════════════
+  IMU [
+    label="DM-IMU-L1\n串口 921600",
+    fillcolor="#F8BBD0", color="#AD1457", penwidth=1.4, width=1.4
+  ];
 
-  // ══ 左腿 · CAN2 ═════════════════════════════════════
+  // ══ 电源（电池 → 分电板 → 各腿）═════════════════════
+  BAT [label="24V 电池", fillcolor="#FFCDD2", color="#B71C1C", width=1.0];
+  PDB [label="分电板", fillcolor="#FFCDD2", color="#B71C1C", width=0.9];
+
+  // ══ 左腿 · can2 ══════════════════════════════════════
   subgraph cluster_left {
-    label="左腿 · CAN2";
-    fontname="Noto Sans CJK SC"; fontsize=13;
+    label="左腿 · can2 · DM4340P_24V ×5";
+    fontname="Noto Sans CJK SC"; fontsize=12;
     color="#1565C0"; style="rounded,dashed"; penwidth=1.8;
 
     L1 [label="ID 1", fillcolor="#BBDEFB", color="#1565C0", width=0.7, height=0.45]
@@ -66,10 +77,10 @@ digraph CAN_Topology {
     { rank=same; L1; L2; L3; L4; L5; LTR; }
   }
 
-  // ══ 右腿 · CAN1 ═════════════════════════════════════
+  // ══ 右腿 · can1 ══════════════════════════════════════
   subgraph cluster_right {
-    label="右腿 · CAN1";
-    fontname="Noto Sans CJK SC"; fontsize=13;
+    label="右腿 · can1 · DM4340P_24V ×5";
+    fontname="Noto Sans CJK SC"; fontsize=12;
     color="#2E7D32"; style="rounded,dashed"; penwidth=1.8;
 
     R1 [label="ID 1", fillcolor="#C8E6C9", color="#2E7D32", width=0.7, height=0.45]
@@ -85,24 +96,25 @@ digraph CAN_Topology {
     { rank=same; R1; R2; R3; R4; R5; RTR; }
   }
 
-  // ══ 脊柱连接 ═════════════════════════════════════════
-  HOST -> MCU [label="USB", color="#6A1B9A", penwidth=1.6];
+  // ══ 连接 ═════════════════════════════════════════════
+  HOST -> FDCAN [label="USB", color="#6A1B9A", penwidth=1.8];
+  HOST -> IMU   [label="串口", color="#AD1457", penwidth=1.6, style=dashed];
 
-  MCU -> L1 [label="CAN2", color="#1565C0", penwidth=2.4, fontsize=11];
-  MCU -> R1 [label="CAN1", color="#2E7D32", penwidth=2.4, fontsize=11];
+  FDCAN -> L1 [label="can2", color="#1565C0", penwidth=2.4, fontsize=11];
+  FDCAN -> R1 [label="can1", color="#2E7D32", penwidth=2.4, fontsize=11];
 
   BAT -> PDB [color="#B71C1C", penwidth=1.6];
-  PDB -> MCU [label="24V", color="#B71C1C", penwidth=1.6, style=dashed];
+  PDB -> FDCAN [label="24V", color="#B71C1C", penwidth=1.4, style=dashed];
 
-  // ══ 关键提醒 ═════════════════════════════════════════
+  // ══ 要点 ═════════════════════════════════════════════
   NOTE [
-    label="⚠️ 电气要点\n\n① 每条腿末端各 1 个 120Ω，共 2 个\n② 反馈帧仲裁 ID 恒为 0x000，\n   电机身份在 D0 低 4 位\n③ txqueuelen 必须设 1000\n   （默认 10 太浅，高频发帧会丢）\n④ 波特率 1 Mbps，必须与电机一致",
+    label="⚠️ 本项目要点\n\n【这是二次开发，不是原厂整机】\n• 无手臂（DM4310/DM3507）\n• 无腰部（DM6006）· 无 CAN3\n\n【电气】\n① 每条腿末端各 1 个 120Ω，共 2 个\n② 反馈帧仲裁 ID 恒为 0x000，\n   电机身份在 D0 低 4 位\n③ txqueuelen 必须设 1000\n④ 波特率 1 Mbps\n\n【对上游的 4 个适配点】\n① CAN 回调按 D0 低4位分发\n② 启用 CAN_RAW_FD_FRAMES\n③ 新增 DM4340P_24V 限幅\n④ 新增 dm_imu_l1 驱动",
     shape=note,
     fillcolor="#FFFDE7",
     color="#9E9E9E",
-    fontsize=10,
+    fontsize=9.5,
     style="filled",
-    width=2.9
+    width=3.2
   ];
 
   { rank=same; BAT; PDB; }

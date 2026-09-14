@@ -16,7 +16,7 @@
 | `unitree_rl_gym` / `humanoid-gym` / `unitree_rl_lab` | README 里**都没有** checklist 和安全章节 |
 | `roboparty_deploy` | 安全内容 **100% 外链到飞书**，仓库内为零 |
 
-**⇒ 这不是重复造轮子，是填一个整个生态都没填的坑。**
+
 
 ---
 

@@ -66,11 +66,11 @@
 | 阶段 | 文档 | 工具 |
 |---|---|---|
 | 0 准备 | [环境与工具链](docs/00-准备/1-环境与工具链.md) · [硬件清单与接线](docs/00-准备/2-硬件清单与接线.md) | [`check_preflight.sh`](scripts/check_preflight.sh) |
-| 1 通讯 | [CAN 总线](docs/01-通讯打通/1-CAN-总线.md) · [IMU 串口](docs/01-通讯打通/2-IMU-串口.md) | — |
-| 2 标定 | [零位](docs/02-标定/1-零位.md) · [方向](docs/02-标定/2-方向.md) · [限位](docs/02-标定/3-限位.md) | [`direction_check.py`](scripts/direction_check.py) · [`limit_check.py`](scripts/limit_check.py) |
+| 1 通讯 | [CAN 总线](docs/01-通讯打通/0-index.md) · [IMU 串口](docs/01-通讯打通/0-index.md) | — |
+| 2 标定 | [零位](docs/02-标定/0-index.md) · [方向](docs/02-标定/0-index.md) · [限位](docs/02-标定/0-index.md) | [`direction_check.py`](scripts/direction_check.py) · [`limit_check.py`](scripts/limit_check.py) |
 | 3 单关节 | [逐关节测试](docs/03-单关节稳停/1-逐关节测试.md) · [kp/kd 整定](docs/03-单关节稳停/2-kp-kd-整定.md) | [`joint_test.py`](scripts/joint_test.py) · [`gain_tune.py`](scripts/gain_tune.py) |
-| 4 契约 | [观测契约对齐](docs/04-模型与契约/1-观测契约对齐.md) | [`check_contract.py`](scripts/check_contract.py) |
-| 5 安全 | [**安全须知（必读）**](docs/05-安全保底/1-安全须知（首次上机必读）.md) · [PD 站立保底](docs/05-安全保底/2-PD站立保底.md) | [`safety_inject_test.py`](scripts/safety_inject_test.py) |
+| 4 契约 | [观测契约对齐](docs/04-模型与契约/0-index.md) | [`check_contract.py`](scripts/check_contract.py) |
+| 5 安全 | [**安全须知（必读）**](docs/05-安全保底/1-安全须知（首次上机必读）.md) · [PD 站立保底](docs/05-安全保底/1-安全须知（首次上机必读）.md) | [`safety_inject_test.py`](scripts/safety_inject_test.py) |
 | 6 训练 | [训练](docs/06-训练/0-index.md) | — |
 | 7 上机 | [上机四步](docs/07-上机四步/0-index.md) | — |
 | 8 排障 | [故障排查](docs/08-故障排查/0-index.md) | — |

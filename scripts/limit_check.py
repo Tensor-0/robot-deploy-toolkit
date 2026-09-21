@@ -1,22 +1,47 @@
 #!/usr/bin/env python3
-"""limit_check.py — 限位 / 行程检查（阶段 2）
+"""limit_check.py — ⛔ 已知不可用，请勿使用（2026-09-17 实测）
 
-**验证什么**：
+    ⚠️⚠️ 本脚本给出的是【假成功】，不是真实测量。两个致命问题：
+
+    1. **kp=0 纯阻尼「扫行程」⇒ 关节根本不动。**
+       本脚本下发 `motor_mit_cmd(q, 0.0, 0.0, 1.0, 0.0)` —— kp=0。
+       MIT 的力矩 = kp*(p_des−p) + kd*(v_des−v) + t_ff，
+       kp=0 时【没有指向目标的力矩】⇒ 关节不会跟随 p_des。
+       2026-09-17 实测对照（右膝，同目标 +0.15）：
+           kp=0  → Δ = +0.0000 rad（纹丝不动）
+           kp=20 → Δ = +0.1125 rad（6.45°）
+       ⇒ 它以为在"慢速扫到限位"，实际什么都没扫。
+
+    2. **它用 `get_error_id()` 判故障 ⇒ 恒读到 0 ⇒ 永远看不到错误。**
+       驱动 `dm_motor_driver.cpp:238` 只在高4位 >7 时写 error_id_，
+       而 err=1（使能）不 >7 ⇒ 它永远是初值 0。详见 memory `dm-driver-error-id-bug`。
+
+    两个问题叠加的后果：`reached_lo/hi` 读到"没变的位置"，`err_peak` 恒 0
+    ⇒ 打印 "✓"，给出一个【从未真正测量过】的"限位正常"结论。
+
+    另有使能时序问题（`init_motor()` 之后再调 `set_motor_control_mode`）——
+    正是 2026-09-04 在 dm-dual-motor-test 提交 8e64d09 修过的那个。
+
+    ✅ 改用 `probe_direction.py --toward-limit {lo,hi,both}`：
+       它用已验证的使能时序、自解反馈帧、并保留了「位置没动就报异常」这道检查。
+       详见 docs/02-标定/0-index.md §3.3。
+
+    ⚠️ 本文件保留仅作记录。要么按上述三点修好，要么删掉 —— 别直接跑。
+
+--- 以下为原始说明（已失效，仅留档）---
+
+验证什么：
   1. 关节能在软限位内自由转动（不撞硬限位）
   2. 软限位触发时的角度与配置是否一致
   3. 有没有异常干涉（异响/卡顿/电流突增）
 
-⚠️ **这个脚本比 joint_test.py 更危险** —— 它是往极限位置走。
-   默认幅度小、速度慢，且到达配置限位就停。
+⚠️ 这个脚本比 joint_test.py 更危险 —— 它是往极限位置走。
 
 用法:
   # 从配置读 joint_limits，逐关节慢速扫到限位附近就停
   python3 limit_check.py --config <robot.yaml>
 
-  # 指定关节 + 手动范围
-  python3 limit_check.py --config <robot.yaml> --joint 3 --range -0.2,2.0
-
-前置：机器人必须**空载 + 悬空**。别人身站输出轴方向。
+前置：机器人必须空载 + 悬空。别人身站输出轴方向。
 """
 import argparse
 import json
@@ -65,6 +90,21 @@ def get_limits(cfg, index):
 
 
 def main():
+    # ⛔ 2026-09-17：已知不可用 —— 实测 kp=0 时关节根本不动，
+    #    而它仍会打印"✓ 限位正常"（假成功）。详见模块 docstring。
+    print("⛔ limit_check.py 已知不可用，拒绝执行（2026-09-17 实测）。")
+    print("   原因：kp=0 纯阻尼不产生指向目标的力矩 ⇒ 关节不动；")
+    print("        而 get_error_id() 恒返回 0 ⇒ 看不到故障 ⇒ 报告'✓'（假成功）。")
+    print("   实测对照（右膝，同目标 +0.15）：kp=0 → Δ=+0.0000 ；kp=20 → Δ=+0.1125")
+    print()
+    print("   ✅ 请改用：python3 scripts/probe_direction.py --bus can2 --motor-id 2 \\")
+    print("                --toward-limit both --margin 0.15 --confirm")
+    print("   （它用已验证的使能时序 + 自解反馈，并保留了「位置没动就报异常」的检查）")
+    print()
+    print("   ⚠️ 若确要运行本脚本做对照实验，设 LIMIT_CHECK_FORCE=1")
+    if os.environ.get("LIMIT_CHECK_FORCE") != "1":
+        return 2
+
     ap = argparse.ArgumentParser(description="限位/行程检查")
     ap.add_argument("--config", required=True)
     ap.add_argument("--joint", type=int, help="只测某个索引")
@@ -220,4 +260,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

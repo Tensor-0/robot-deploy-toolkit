@@ -224,8 +224,19 @@ ros2 service call /read_joints    std_srvs/srv/Trigger
 **⚠️ 安全**：**扫行程时必须空载 + 有人盯着**，且从**小幅度**开始。
 
 ```bash
-# 用 joint_test.py 做慢速行程扫描
-python3 scripts/joint_test.py --config <robot.yaml> --joint 3 --sweep 0.1
+# 行程扫描（⚠️ 2026-09-17 更正：原先这里写的
+#   `joint_test.py --joint 3 --sweep 0.1` 参数根本不存在 —— joint_test.py
+#   只接受 --config/--readonly/--amplitude/--joints/--cycles/--out，没有 --joint 也没有 --sweep）
+#
+# ⚠️⚠️ 也别用 limit_check.py：它用 kp=0 纯阻尼"扫行程"，实测【关节根本不动】
+#   （2026-09-17 实测对照：kp=0 → Δ=0.0000；kp=20 → Δ=+6.45°），
+#   而它又会读到 err=0（驱动 get_error_id 恒 0）⇒ 报告"✓ 限位正常"。
+#   ⚠️ 那是【假成功】—— 它给的是一个从未真正测量过的结论。
+#   ⇒ 改用已验证的 probe_direction.py 的 --toward-limit 模式：
+python3 scripts/probe_direction.py --bus can1 --motor-id 2 \
+    --toward-limit both --margin 0.15 --confirm
+# 判据（三条全过才算"到达"）：位置真的移动 / 力矩超噪声 / 自解 err 无故障
+# ⚠️ 它刻意保留了"没动就报异常"这道检查 —— 正是 limit_check.py 缺的那道
 ```
 
 ---
@@ -261,7 +272,7 @@ python3 scripts/joint_test.py --config <robot.yaml> --joint 3 --sweep 0.1
   "robot": "dm10",
   "method": "script" | "service",
   "joints": [
-    {"index": 0, "name": "leg_l1", "motor_id": 1, "bus": "can2",
+    {"index": 0, "name": "leg_l1", "motor_id": 1, "bus": "can1",
      "zero_offset": 0.0, "sign": 1, "verified": true}
   ],
   "notes": "右腿 ID=1 电机返修装回后重新标定"
@@ -282,20 +293,44 @@ python3 scripts/joint_test.py --config <robot.yaml> --joint 3 --sweep 0.1
 
 > ⚠️ **最后一条尤其重要**：
 > **硬件维修窗口会改变零位。**
-> 【实测】DM10 的右腿 ID=1 电机在返修，**装回来之后零位很可能和之前不一致**。
+> 【实测】DM10 的右腿 ID=1 电机返修过 —— ~~**装回来之后零位很可能和之前不一致**~~
+> → **2026-09-17 已装回**：10 台全部就位、机器人吊架悬挂。⇒ **本条从"预告"变成了"现在就要做的事"**。
 > ⇒ 这也意味着：**训练时要加「零位偏置」的域随机化**，否则策略上真机会直接偏。
+> （UniLab 的 dm10 运动跟踪任务已开 `joint_default_position_range: ±0.02`，
+>   ⇒ 那 **±0.02 rad ≈ 1.1° 就是本阶段标定的验收线**）
+
+---
+
+## ⭐ 现在从哪开始（2026-09-17）
+
+**前置条件已具备**（10 台电机全装好、机器人吊架悬挂）。按这个顺序走：
+
+```bash
+# 第 0 步（安全关键）：先验 IMU 朝向再谈别的 —— 装反 = 上电瞬间触发跌倒保护关机
+# 第 1 步：只读全状态快照（⚠️ 全程不使能电机）
+source /opt/ros/humble/setup.bash && source <roboparty_deploy>/install/setup.bash
+python3 scripts/snapshot_state.py --config <roboparty_deploy>/src/inference/robots/dm10/robot.yaml
+```
+`snapshot_state.py` 一次回答三件事：**哪条总线对应哪条腿**（三份文档说法不一，读数裁决）、
+**电机出厂零位在直腿位还是屈膝位**、**IMU 的 Z 轴朝上还是朝下**。
+它走逐台 `motors_py` API 且**只发失能/读请求**，绕过会 `lock_motor()` 的 `init_motors()`。
 
 ---
 
 ## 工具
 
 ```bash
-# 零位标定（逐台，带确认）
+# ⭐ 只读全状态快照（不使能；标定前的"尺子"，先跑这个）
+python3 scripts/snapshot_state.py --config <robot.yaml> [--no-imu]
+
+# 零位标定（逐台，带确认）—— ⚠️ 它走 init_motors()，会先使能电机
 python3 roboparty_deploy/scripts/set_zero.py
 
 # 方向验证（逐关节给正负小目标，比对位移符号）
 python3 scripts/direction_check.py --config <robot.yaml>
 
-# 限位/行程检查（慢速扫描）
-python3 scripts/limit_check.py --config <robot.yaml> --joint 3
+# 限位/行程检查
+# ⚠️ 不要用 limit_check.py —— 它 kp=0 纯阻尼，实测关节根本不动，却会报"✓"（假成功）
+#    详见本文件 §3.3 的说明
+python3 scripts/probe_direction.py --bus can1 --motor-id 2 --toward-limit both --confirm
 ```

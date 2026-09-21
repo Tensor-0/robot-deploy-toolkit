@@ -129,7 +129,7 @@ python3 scripts/joint_test.py --config <robot.yaml> --amplitude 0.1 --out result
 
 ```json
 {
-  "index": 3, "motor_id": 4, "interface": "can2",
+  "index": 3, "motor_id": 4, "interface": "can0",
   "q_initial": 0.8012, "q_final": 0.9015,
   "tracking_err_max": 0.0123,
   "status": "ok",

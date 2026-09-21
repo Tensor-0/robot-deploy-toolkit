@@ -19,7 +19,7 @@ digraph CAN_Topology {
     ranksep=0.52,
     pad=0.4,
     splines=polyline,
-    label="CAN 总线拓扑（二次开发：RDK X5 + DM-USB2FDCAN + 纯下肢 10 关节）\ncan2 = 左腿（ID 1-5） · can1 = 右腿（ID 1-5） · 仲裁域 1 Mbps",
+    label="CAN 总线拓扑（二次开发：RDK X5 + DM-USB2FDCAN + 纯下肢 10 关节）\ncan0 = 左腿（ID 1-5） · can1 = 右腿（ID 1-5） · 仲裁域 1 Mbps",
     labelloc="t"
   ];
 
@@ -58,9 +58,9 @@ digraph CAN_Topology {
   BAT [label="24V 电池", fillcolor="#FFCDD2", color="#B71C1C", width=1.0];
   PDB [label="分电板", fillcolor="#FFCDD2", color="#B71C1C", width=0.9];
 
-  // ══ 左腿 · can2 ══════════════════════════════════════
+  // ══ 左腿 · can0 ══════════════════════════════════════
   subgraph cluster_left {
-    label="左腿 · can2 · DM4340P_24V ×5";
+    label="左腿 · can0 · DM4340P_24V ×5";
     fontname="Noto Sans CJK SC"; fontsize=12;
     color="#1565C0"; style="rounded,dashed"; penwidth=1.8;
 
@@ -100,7 +100,7 @@ digraph CAN_Topology {
   HOST -> FDCAN [label="USB", color="#6A1B9A", penwidth=1.8];
   HOST -> IMU   [label="串口", color="#AD1457", penwidth=1.6, style=dashed];
 
-  FDCAN -> L1 [label="can2", color="#1565C0", penwidth=2.4, fontsize=11];
+  FDCAN -> L1 [label="can0", color="#1565C0", penwidth=2.4, fontsize=11];
   FDCAN -> R1 [label="can1", color="#2E7D32", penwidth=2.4, fontsize=11];
 
   BAT -> PDB [color="#B71C1C", penwidth=1.6];

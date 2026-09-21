@@ -42,11 +42,11 @@
 
 ```bash
 # 手动（调试用）
-sudo ip link set can1 up type can bitrate 1000000
-sudo ip link set can1 txqueuelen 1000
+sudo ip link set can0 up type can bitrate 1000000
+sudo ip link set can0 txqueuelen 1000
 
 # 验证
-ip -details link show can1 | grep -E "state|bitrate|qlen"
+ip -details link show can0 | grep -E "state|bitrate|qlen"
 ```
 
 **⚠️ 两个容易漏的点**：
@@ -102,14 +102,20 @@ setsockopt(sockfd_, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &enable, sizeof(enable));
 
 **不要靠猜。** 用 udev 的 `KERNELS==` 绑定到**物理 USB 口**，或者插一根测一根。
 
-**【实测】** DM10 的映射（**2026-09-08 RDK X5 实测，覆盖旧的"can1=左腿"说法**）：
+**【实测】** DM10 的映射（**2026-09-17 实测裁决，覆盖 2026-09-08 的错误结论**）：
 
 | 总线 | 部位 |
 |---|---|
-| **can2** | **左腿**（ID 1-5）|
+| **can0** | **左腿**（ID 1-5）|
 | **can1** | **右腿**（ID 1-5）|
 
-> ⚠️ **和直觉相反**（一般会以为 can1 在前）。
+> ⚠️ **2026-09-08 曾得出相反结论**（"can2=左腿、can1=右腿，和直觉相反"）—— 那个是**错的**。
+>
+> ⚠️ **接口名本身也会漂**：2026-09-17 之前板载 CAN 在启动时抢占 `can0`，
+> USB 适配器只能拿到 can1/can2（所以那天的实测记录写的是 can1=左 / can2=右）。
+> 禁掉板载 CAN（`systemctl disable can4.service`）之后才是 can0/can1。
+> **接线一根没动，只是名字整体降了一位。**
+> ⇒ 脚本一律从 `robot.yaml` 的 `motor_interface` 读，别写死。
 
 ---
 

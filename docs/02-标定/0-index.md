@@ -272,12 +272,18 @@ python3 scripts/probe_direction.py --bus can1 --motor-id 2 \
   "robot": "dm10",
   "method": "script" | "service",
   "joints": [
-    {"index": 0, "name": "leg_l1", "motor_id": 1, "bus": "can1",
+    {"index": 9, "name": "leg_r5", "motor_id": 1, "bus": "can1",
      "zero_offset": 0.0, "sign": 1, "verified": true}
   ],
   "notes": "右腿 ID=1 电机返修装回后重新标定"
 }
 ```
+
+> ⚠️ 这三个字段**必须自洽，且不是同一个数**：
+> `index` = 策略关节顺序（0=左髋pitch … 4=左踝，5=右髋pitch … 9=右踝）；
+> `motor_id` = CAN ID（**脚踝=1、膝=2 … 髋pitch=5** —— 与 index 顺序**正好相反**）；
+> `bus` = can0（左腿）/ can1（右腿）。
+> 上例 `index 9` = `leg_r5` = **右踝** = CAN ID **1** = `can1`。见 [接线速查 §1.2](../assets/CAN接线速查.md)。
 
 ---
 

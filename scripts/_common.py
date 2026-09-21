@@ -92,6 +92,89 @@ def build_motor_specs(cfg):
     return specs
 
 
+def check_tx_alive(iface, n_frames=10, settle=0.02):
+    """⭐ TX 假死检测 —— 发 n_frames 帧，看内核 TX 计数是否增长。
+
+    为什么需要（2026-09-17 第二次踩到）：
+      gs_usb 在某些情况下会进 TX 假死 —— **发送调用不报错、接口显示 UP/ERROR-ACTIVE、
+      bus-off=0，但帧根本不出引脚、内核 TX 计数不增长**。
+      后果：
+        · 扫描会"全假阴性"（误判成电机坏了/没接）
+        · 更坏：以为在下发指令，实际一条没出去 ⇒ 机器人不动却查不出原因
+      解卡：`ip link set <iface> down && ip link set <iface> up type can ...`
+
+    ⚠️ 本函数【只发失能帧 FF×7 FD】（read mode），不使能、不产生力矩，安全。
+
+    返回 (是否活, 增长帧数)。设备不存在时返回 (None, -1)。
+    """
+    import subprocess
+    import time as _t
+    stat = f"/sys/class/net/{iface}/statistics/tx_packets"
+
+    def _tx():
+        try:
+            with open(stat) as f:
+                return int(f.read().strip())
+        except Exception:
+            return None
+
+    before = _tx()
+    if before is None:
+        return None, -1          # 接口不存在（交给上层报错）
+
+    # ⚠️ 接口存在但没 UP ⇒ 必然发不出 ⇒ 直接判假死（不能只靠 TX 计数，那时 cangen 会失败）
+    try:
+        with open(f"/sys/class/net/{iface}/operstate") as f:
+            if f.read().strip() == "down":
+                return False, 0
+    except Exception:
+        pass
+
+    try:
+        r = subprocess.run(["cangen", iface, "-I", "7FF", "-L", "8",
+                            "-D", "FFFFFFFFFFFFFFFD", "-n", str(n_frames), "-g", "5"],
+                           capture_output=True, timeout=10)
+        if r.returncode != 0:
+            # cangen 跑失败（接口 down / 无权限）⇒ 按假死处理（宁可误报）
+            return False, 0
+    except Exception:
+        return False, 0
+    _t.sleep(settle)
+    after = _tx()
+    grew = (after or 0) - (before or 0)
+    return grew >= n_frames, grew
+
+
+def check_tx_alive_all(cfg_or_specs):
+    """对所有用到的接口做 TX 假死检测，有问题就打印醒目告警（不退出，只提示）。"""
+    specs = cfg_or_specs if isinstance(cfg_or_specs, list) else build_motor_specs(cfg_or_specs)
+    ifaces = sorted({s["interface"] for s in specs})
+    bad = []
+    print(f"{'接口':<8}{'TX 计数增长':>14}  状态")
+    print("-" * 40)
+    for i in ifaces:
+        alive, grew = check_tx_alive(i)
+        if alive is None:
+            print(f"{i:<8}{'—':>14}  🔴 接口不存在")
+            bad.append(i)
+        elif alive:
+            print(f"{i:<8}{'+' + str(grew):>14}  ✅ 正常")
+        else:
+            print(f"{i:<8}{'+' + str(grew):>14}  🔴 TX 假死")
+            bad.append(i)
+    if bad:
+        print()
+        print(f"{RED}🔴 检测到 TX 假死：{bad}{RST}")
+        print(f"{YEL}  症状：接口显示 UP/ERROR-ACTIVE、bus-off=0、发送不报错，")
+        print(f"        但帧不出引脚、TX 计数不增长 ⇒ 扫描会全假阴性。{RST}")
+        print(f"{YEL}  解卡：{RST}")
+        for i in bad:
+            print(f"    sudo ip link set {i} down && \\")
+            print(f"    sudo ip link set {i} up type can bitrate 1000000 "
+                  f"dbitrate 5000000 fd on loopback off")
+    return bad
+
+
 def create_motors(motors_py, specs):
     """建实例。⚠️ 同总线同 ID 会静默顶掉前者 —— 本函数会检测重复。"""
     seen = {}

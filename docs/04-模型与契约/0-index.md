@@ -27,13 +27,14 @@ if (obs_total_elements != onnx_input_size) throw "ONNX input size mismatch";
 
 ---
 
-## 二、⭐ 五样必须手工对齐的东西
+## 二、⭐ 六样必须手工对齐的东西
 
 `policy.onnx` **只含网络**，下面这些**都不在里面**：
 
 | # | 项 | 训练侧位置 | 部署侧位置 | 有校验吗 |
 |---|---|---|---|---|
-| **1** | **观测顺序 + 维度** | `base.yaml` 的 term 声明顺序 | `default.yaml` 的 `obs_layouts` 字符串 | ❌ **只比总元素数** |
+| **1** | **观测顺序 + 维度** | `base.yaml` 的 term 声明顺序 | `default.yaml` 的 `obs_layouts` 字符串 | ✅ 顺序+维度（用 `--manifest`）；只比总元素数没有它 |
+| **1b** | **观测可得性**（真机拿得到吗） | 同上 | 部署框架的 obs 源白名单 | ✅ 无源即拒（见 §五） |
 | **2** | 动作缩放 | `actions.joint_pos.scale` | `action_scale` | ❌ |
 | **3** | 动作裁剪 | 环境侧 `clip_actions` | `clip_actions` | ❌ |
 | **4** | 关节默认角 | 环境侧 `joint_default_angle` | `joint_default_angle` | ❌ |
@@ -41,6 +42,10 @@ if (obs_total_elements != onnx_input_size) throw "ONNX input size mismatch";
 | — | 归一化 | **烘焙进 onnx** | **不做** | ✅ 一致 |
 
 > ⚠️ **这张表就是「静默失败」的温床。**
+>
+> ⭐ 第 1 与第 1b 是**两类不同的错**：
+> 顺序错 → 改一行字符串就能修；**可得性错 → 改字符串修不了**，只能换观测集重训或在部署侧新建源。
+> 2026-09 那次就是第 1b 类：65 维策略训完 3.5 天后才发现真机给不出其中 3 项。
 
 ---
 
@@ -99,7 +104,7 @@ if (obs_total_elements != onnx_input_size) throw "ONNX input size mismatch";
 
 **改一行字符串只解决「这一次」。真正的解法是防呆机制。**
 
-### 4.1 好消息：基础已经现成
+### 4.1 好消息：基础已经现成，但**只有一半**
 
 **训练跑完会自动落盘 `run_config.json`**，里面 `contract_snapshot` **逐字保存了配置契约**：
 
@@ -113,7 +118,12 @@ if (obs_total_elements != onnx_input_size) throw "ONNX input size mismatch";
         └── env.ctrl_dt
 ```
 
-> **⇒ 不用新写 dump 逻辑，只要让部署侧去读它、比对。**
+> ⚠️ **更正（2026-09-17）**：快照里 **只有顺序、没有维度**（各 term 的宽度由 func 在运行时决定）。
+> 所以"读快照比对"实际只覆盖了顺序那一半 —— 维度校验是空的。
+>
+> ⇒ **维度要靠 `obs_manifest.json`**：UniLab 导出 onnx 时会写一份（`write_obs_manifest`），
+> 给已有 checkpoint 补可以用 `UniLab/_dump_obs_manifest.py`。
+> 它自带 `signature`（`term:dim|term:dim|…`）与 `obs_dim`，可直接与部署侧 `obs_layouts` 对差。
 
 ### 4.2 三档守卫（借用 UniLab 官方设计）
 
@@ -130,22 +140,75 @@ if (obs_total_elements != onnx_input_size) throw "ONNX input size mismatch";
 ### 4.3 用工具
 
 ```bash
+# ① 先拿训练侧的观测清单（顺序 + 每段维度）
+cd /path/to/UniLab
+python3 _dump_obs_manifest.py --run-dir <训练 run 目录>          # 已有 checkpoint
+python3 _dump_obs_manifest.py --task dm10_motion_tracking/base \
+        --out /tmp/m.json                                     # ⭐ 训练【前】预检，约 15 秒
+
+# ② 再与部署侧比对
+cd /path/to/robot-deploy-toolkit
 python3 scripts/check_contract.py \
-    --run-dir <UniLab run 目录> \
+    --manifest <上面的 obs_manifest.json> \
     --deploy-config <部署 policy yaml>
 ```
 
 **输出示例**（真实跑 DM10 的结果）：
 
 ```
-训练侧                     部署侧
-[0] base_ang_vel         base_ang_vel              ✅
-[1] projected_gravity    projected_gravity         ✅
-[2] joint_pos            command                   ❌ DENY
+训练侧                           部署侧
+[0] base_ang_vel:3               ang_vel:3                     ✅
+[1] projected_gravity:3          gravity_b:3                   ✅
+[2] joint_pos:10                 cmd_vel:3                     ❌ DENY 顺序/名字不符
 ...
  DENY：观测契约不一致 —— 不要部署！
 退出码: 1
 ```
+
+**回归测试**（用真实发生过的 bug 当用例，含"合法样例必须通过"）：
+
+```bash
+bash tests/test_check_contract.sh
+```
+
+---
+
+### 4.4 ⭐ 第二档：观测**可得性**（真机拿得到吗）
+
+顺序错是"两边对不上"；**可得性是"训练用了真机没有的东西"**。后者改字符串修不了 ——
+2026-09 的 DM10 65 维策略就是这么栽的：训完 3.5 天后才发现其中 3 项真机给不出。
+
+工具会**现场解析**部署侧的观测源白名单（`roboparty_deploy/src/inference/src/obs_manager.cpp`
+的 `obs_source_definitions()`），再逐项判断训练侧每个 term 有没有源：
+
+```
+ 观测可得性（训练用到的每一项，部署侧有没有源）
+  ✅ command                  ← motion_command
+  ❌ motion_anchor_pos_b      部署侧【无源】 —— 需要「机器人在世界里的位置」（里程计）
+  ❌ base_lin_vel             部署侧【无源】 —— 真机没有能直接测「机体相对地面线速度」的传感器
+  ✅ base_ang_vel             ← ang_vel
+  ...
+  ⚠️ 有 3 项训练观测在部署侧【没有来源】 —— 顺序错可以重排，没源只能：
+       (a) 在部署侧新建这个观测源（要写 C++ 并重新编译上板），或
+       (b) 换一个不含这些观测的任务配置，重新训练
+```
+
+**⚠️ 为什么这一档是 DENY 而不是 WARN**：
+不存在"部署时把那几项删掉"的中间解 —— 删掉意味着策略收到**分布外输入**，
+出去就是摔倒（DM10 实测：置 0 → 生存率 −57%）。
+
+**上游的现成药方**（两个"去掉这些观测"的部署版任务配置，照抄即可）：
+
+| 配置 | 去掉的观测 |
+|---|---|
+| `UniLab/src/unilab/conf/ppo/task/g1_motion_tracking_deploy/mujoco.yaml:15-16` | `motion_anchor_pos_b`、`base_lin_vel` |
+| `UniLab/src/unilab/conf/sac/task/g1_wbt_obs/mujoco.yaml:47,55` | 同上（**与 FlashSAC 同类**，另加 5 帧历史） |
+
+官方口径：UniLab `docs/.../3-deployment/1-sim_to_real/1-overview.md` 的**上机前检查清单第 5 条** ——
+"如果你的策略读 `body_lin_vel`，你需要一个部署侧的估计器，或者一个把该信号从 actor 输入中移除的任务 owner 变体。"
+
+> 📌 **这条检查最该在"训练之前"跑**（`--task <任务名> --out`，15 秒）。
+> 训完再发现，代价是 1 小时训练 + 3.5 天。
 
 ---
 

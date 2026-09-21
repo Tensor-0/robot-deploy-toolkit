@@ -53,8 +53,12 @@
 
 **配合工具**：
 ```bash
-# 部署前先跑契约比对
-python3 scripts/check_contract.py --run-dir <训练run> --deploy-config <部署yaml>
+# 部署前先跑契约比对（顺序 + 每段维度 + 可得性）
+python3 _dump_obs_manifest.py --run-dir <训练run>              # 在 UniLab 侧，生成清单
+python3 scripts/check_contract.py --manifest <obs_manifest.json> \
+        --deploy-config <部署yaml>                              # 在本仓库
+# ⭐ 清单里的 3 项无源观测会直接 DENY —— 那说明这份策略【不该上机】，
+#    先回训练侧换观测集（见 04-模型与契约 §4.4），别在这里绕。
 ```
 
 ---

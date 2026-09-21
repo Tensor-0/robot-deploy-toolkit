@@ -1,0 +1,6 @@
+# 65 维策略能写出的【最好】的部署布局：把三项无源观测都丢掉，只剩 56 维。
+# 它必须被拒 —— 否则会得出"部署时删掉那几项就行"的错误结论（那是分布外输入）。
+inference_node:
+    ros__parameters:
+        obs_layouts:
+          - "motion_command:20, ang_vel:3, gravity_b:3, dof_pos:10, dof_vel:10, last_action:10"

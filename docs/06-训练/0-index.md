@@ -123,13 +123,22 @@
 ```
 ☐ policy.onnx 导出了
 ☐ run_config.json 里有 contract_snapshot
-☐ 记下了 obs 的声明顺序和每段维度
+☐ 记下了 obs 的声明顺序和每段维度（⭐ 顺序在快照里，维度靠 obs_manifest.json）
+☐ ⭐ 每个观测 term 都能落到部署侧的源 —— check_contract.py 通过（含可得性一档）
 ☐ 记下了 action_scale / clip_actions / joint_default_angle
 ☐ 记下了 kp/kd（是真机的，不是仿真的）
 ☐ 域随机化覆盖了：PD 增益 / 质量 / 摩擦 / 观测噪声 / 关节零位偏置
 ☐ 训练时建了动作延迟
 ☐ 有同种子仿真回放视频
 ```
+
+> ⭐ **最后两项之前，请先做这一项（训练【前】）**：
+> ```bash
+> cd <UniLab>; python3 _dump_obs_manifest.py --task <任务名> --out /tmp/m.json   # ~15 秒
+> cd <本仓库>; python3 scripts/check_contract.py --manifest /tmp/m.json --deploy-config <部署yaml>
+> ```
+> **训完再发现"有一项真机给不出"，代价是 1 小时训练 + 几天。**
+> （2026-09 的 DM10 65 维策略就是这么栽的 —— 详见 [观测契约](../04-模型与契约/0-index.md) §4.4）
 
 **然后**：跑 `scripts/check_contract.py` 做契约比对 → 进入[阶段 7 上机](../07-上机四步/0-index.md)。
 

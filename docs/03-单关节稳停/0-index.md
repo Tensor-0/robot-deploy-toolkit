@@ -129,13 +129,18 @@ python3 scripts/joint_test.py --config <robot.yaml> --amplitude 0.1 --out result
 
 ```json
 {
-  "index": 3, "motor_id": 4, "interface": "can2",
+  "index": 3, "motor_id": 2, "interface": "can0",
   "q_initial": 0.8012, "q_final": 0.9015,
   "tracking_err_max": 0.0123,
   "status": "ok",
   "error_id": 0, "temp": 32.5
 }
 ```
+
+> ⚠️ `index` 和 `motor_id` **不是同一个数**：`index` 是策略关节顺序
+> （0=左髋pitch … 3=左膝 … 9=右踝），而 `motor_id` 是 CAN ID
+> （**脚踝=1、膝=2 … 髋pitch=5** —— 与 index 顺序**正好相反**）。
+> 上例 `index 3` = **左膝** = CAN ID **2** = `can0`。见 [接线速查 §1.2](../assets/CAN接线速查.md)。
 
 | 字段 | 判读 |
 |---|---|

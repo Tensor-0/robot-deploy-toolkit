@@ -10,11 +10,11 @@
 <title>CAN_Topology</title>
 <polygon fill="white" stroke="transparent" points="-28.8,28.8 -28.8,-461.8 1232.8,-461.8 1232.8,28.8 -28.8,28.8"/>
 <text text-anchor="middle" x="602" y="-417" font-family="Noto Sans CJK SC" font-size="15.00">CAN 总线拓扑（二次开发：RDK X5 + DM&#45;USB2FDCAN + 纯下肢 10 关节）</text>
-<text text-anchor="middle" x="602" y="-400" font-family="Noto Sans CJK SC" font-size="15.00">can2 = 左腿（ID 1&#45;5） · can1 = 右腿（ID 1&#45;5） · 仲裁域 1 Mbps</text>
+<text text-anchor="middle" x="602" y="-400" font-family="Noto Sans CJK SC" font-size="15.00">can0 = 左腿（ID 1&#45;5） · can1 = 右腿（ID 1&#45;5） · 仲裁域 1 Mbps</text>
 <g id="clust1" class="cluster">
 <title>cluster_left</title>
 <path fill="white" stroke="#1565c0" stroke-width="1.8" stroke-dasharray="5,2" d="M20,-8C20,-8 586,-8 586,-8 592,-8 598,-14 598,-20 598,-20 598,-65 598,-65 598,-71 592,-77 586,-77 586,-77 20,-77 20,-77 14,-77 8,-71 8,-65 8,-65 8,-20 8,-20 8,-14 14,-8 20,-8"/>
-<text text-anchor="middle" x="303" y="-63.4" font-family="Noto Sans CJK SC" font-size="12.00">左腿 · can2 · DM4340P_24V ×5</text>
+<text text-anchor="middle" x="303" y="-63.4" font-family="Noto Sans CJK SC" font-size="12.00">左腿 · can0 · DM4340P_24V ×5</text>
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_right</title>
@@ -67,7 +67,7 @@
 <title>FDCAN&#45;&gt;L1</title>
 <path fill="none" stroke="#1565c0" stroke-width="2.4" d="M339.49,-120.5C249.01,-104 101,-77 101,-77 101,-77 85.34,-65.52 70.02,-54.28"/>
 <polygon fill="#1565c0" stroke="#1565c0" stroke-width="2.4" points="71.78,-51.23 61.65,-48.14 67.64,-56.88 71.78,-51.23"/>
-<text text-anchor="middle" x="221.5" y="-88.2" font-family="Noto Sans CJK SC" font-size="11.00">can2</text>
+<text text-anchor="middle" x="221.5" y="-88.2" font-family="Noto Sans CJK SC" font-size="11.00">can0</text>
 </g>
 <!-- R1 -->
 <g id="node12" class="node">

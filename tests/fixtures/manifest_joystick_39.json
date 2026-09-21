@@ -1,0 +1,39 @@
+{
+  "schema": "unilab-obs-manifest/1",
+  "created_utc": "2026-09-17T08:07:25.413429+00:00",
+  "task_name": "ppo/dm10_joystick_flat/base",
+  "algo": "ppo",
+  "git_commit": "664361366a0427d02254889af7f27ed2f57ddc83",
+  "git_branch": "dm10",
+  "git_dirty": true,
+  "policy_observation_group": "policy",
+  "obs_dim": 39,
+  "terms": [
+    {
+      "name": "base_ang_vel",
+      "dim": 3
+    },
+    {
+      "name": "projected_gravity",
+      "dim": 3
+    },
+    {
+      "name": "joint_pos",
+      "dim": 10
+    },
+    {
+      "name": "joint_vel",
+      "dim": 10
+    },
+    {
+      "name": "actions",
+      "dim": 10
+    },
+    {
+      "name": "command",
+      "dim": 3
+    }
+  ],
+  "signature": "base_ang_vel:3|projected_gravity:3|joint_pos:10|joint_vel:10|actions:10|command:3",
+  "onnx": null
+}

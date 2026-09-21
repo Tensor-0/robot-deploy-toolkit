@@ -1,0 +1,54 @@
+{
+  "schema": "unilab-obs-manifest/1",
+  "created_utc": "2026-09-17T08:06:57.177199+00:00",
+  "task_name": "flashsac/dm10_motion_tracking/base",
+  "algo": "flashsac",
+  "git_commit": "664361366a0427d02254889af7f27ed2f57ddc83",
+  "git_branch": "dm10",
+  "git_dirty": true,
+  "policy_observation_group": "actor",
+  "obs_dim": 65,
+  "terms": [
+    {
+      "name": "command",
+      "dim": 20
+    },
+    {
+      "name": "motion_anchor_pos_b",
+      "dim": 3
+    },
+    {
+      "name": "motion_anchor_ori_b",
+      "dim": 6
+    },
+    {
+      "name": "base_lin_vel",
+      "dim": 3
+    },
+    {
+      "name": "base_ang_vel",
+      "dim": 3
+    },
+    {
+      "name": "joint_pos",
+      "dim": 10
+    },
+    {
+      "name": "joint_vel",
+      "dim": 10
+    },
+    {
+      "name": "actions",
+      "dim": 10
+    }
+  ],
+  "signature": "command:20|motion_anchor_pos_b:3|motion_anchor_ori_b:6|base_lin_vel:3|base_ang_vel:3|joint_pos:10|joint_vel:10|actions:10",
+  "onnx": {
+    "file": "policy.onnx",
+    "input_name": "obs",
+    "input_shape": [
+      1,
+      65
+    ]
+  }
+}

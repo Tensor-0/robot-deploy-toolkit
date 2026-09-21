@@ -86,8 +86,16 @@
 # 上电前自检（不需要接电机）
 ./scripts/check_preflight.sh
 
-# 观测契约比对（训练产物 vs 部署配置）
-python3 scripts/check_contract.py --run-dir <训练run目录> --deploy-config <部署yaml>
+# ⭐ 只读全状态快照（不使能电机）：标定前的"尺子"，先跑这个
+#   一次裁决：哪条总线对应哪条腿 / 电机出厂零位在哪 / IMU 的 Z 轴朝上还是朝下
+python3 scripts/snapshot_state.py --config <roboparty_deploy>/src/inference/robots/dm10/robot.yaml
+
+# 观测契约比对（训练产物 vs 部署配置）：顺序 + 每段维度 + **可得性**
+python3 scripts/check_contract.py --manifest <obs_manifest.json> --deploy-config <部署yaml>
+#   ↑ obs_manifest.json 由 UniLab 侧 `python3 _dump_obs_manifest.py` 生成
+#     （`--task <任务名> --out` 可在【训练前】预检，约 15 秒）
+bash tests/test_check_contract.sh    # 回归测试：用真实发生过的 bug 当用例
+python3 tests/test_set_zero.py       # 同上，测 set_zero.py（默认找 ~/roboparty_deploy，或设 $SET_ZERO_PATH）
 
 # 单关节逐台测试（结果落盘）
 python3 scripts/joint_test.py --config <robot.yaml> --out results/joint_test.json

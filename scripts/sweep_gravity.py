@@ -81,6 +81,7 @@ OSC_TOL = 0.010           # 振荡判据：窗口内极差 < 0.010 rad（≈26 �
 DRIFT_TOL = 0.005         # 漂移判据：|q̇| < 0.005 rad/s（0.5 s 内 < 0.0025 rad）
 STABLE_WINDOW = 0.5       # 判稳窗口（秒）
 MAX_WAIT = 25.0           # 单点最长等待（秒），超时标 unreliable
+RAMP_KP_SCALE = 1.0 / 2.5 # 软启动期间 kp 缩放（对齐节点 reset_joints 的做法）
 
 
 def tilt_deg(quat_wxyz):
@@ -116,10 +117,23 @@ def main():
                     help="双向逼近的偏移量（rad）。必须大到能【冲破静摩擦】——"
                          "实测摩擦带 0.5 N·m / Kp=18 ⇒ 0.03 rad，取 0.10 有 3 倍余量")
     ap.add_argument("--settle", type=float, default=5.0, help="到达后先等多久（秒）")
+    ap.add_argument("--span", type=float, default=None,
+                    help="扫描跨度（rad）。默认 = 关节行程的 80%。"
+                         "⚠️ 落地测试必须给小值（或配 --n 1 只测默认位那一点）")
+    ap.add_argument("--tilt-abort", type=float, default=15.0,
+                    help="⚠️ 硬阈值：机身倾角超过它【立刻中止并失能】（落地安全阀）")
     ap.add_argument("--tilt-max", type=float, default=8.0,
                     help="机身倾角【哨兵】阈值（度）。吊带法下 3~6° 是常态，"
                          "别拿它当过滤器 —— 真正过滤靠记录下来的 tilt_mean_deg")
-    ap.add_argument("--out", default=None, help="落盘路径")
+    ap.add_argument("--hold-seconds", type=float, default=0.0,
+                    help="接管后先保持默认位 N 秒再开始扫描。"
+                         "换控制权时用：本脚本 init 电机并开始发帧后，"
+                         "在这段时间里停掉 inference 节点、把机器人放到地上")
+    ap.add_argument("--hold-after", type=float, default=0.0,
+                    help="⚠️ 扫完后【继续保持 PD 站立】N 秒再失能。"
+                         "落地测试必须给大值 —— 否则测完立刻失能 = 机器人当场瘫倒。\n"
+                         "本脚本跑完会打印提示；按 Ctrl+C 才真正结束。")
+    ap.add_argument("--out", default=None, help="落盘路径")   # ⚠️ 别删：被 replace 吃掉过一次
     ap.add_argument("--dry-run", action="store_true", help="只回默认位，不扫")
     ap.add_argument("--verify-from",
                     help="验收模式 1（静止）：用 sweep JSON 里【默认姿态】那一行的 τ 当"
@@ -130,6 +144,15 @@ def main():
                          "同轨迹同速度、只差前馈 ⇒ e_A−e_B = τ_ff/Kp 把阻尼和摩擦都差掉。")
     ap.add_argument("--track-seconds", type=float, default=10.0, help="单趟扫描时长")
     args = ap.parse_args()
+
+    # ⚠️ 参数自检（2026-09-21 踩过）：--out 被一次 str.replace 静默吃掉，
+    #    语法检查抓不到（args.out 只在运行时访问），结果【跑完 5 分钟测量、
+    #    在最后一行落盘时才崩】。这里一次性确认所有会用到的属性都在。
+    for _a in ("config", "infer_config", "joint", "leg", "n", "ramp", "ramp_short",
+               "delta", "settle", "span", "tilt_abort", "tilt_max", "hold_seconds",
+               "hold_after", "out", "dry_run", "verify_from", "track_from", "track_seconds"):
+        if not hasattr(args, _a):
+            raise SystemExit(f"!! 参数自检失败：args.{_a} 不存在 —— argparse 定义被改坏了")
 
     cfg = load_yaml(args.config)
     motors_py = need_motors_py()
@@ -196,6 +219,8 @@ def main():
     records = []
     t0 = time.time()
 
+    ramp_kp = False              # 软启动期间降 kp（和节点 reset_joints 的 kp/2.5 同款）
+
     def send_once():
         """所有电机按当前 target 发一帧。
 
@@ -203,7 +228,8 @@ def main():
            ⇒ τ_m = sign × τ_j。
         """
         for i, (_, mv) in enumerate(motors):
-            mv.motor_mit_cmd(target[i] * sign[i], 0.0, kp[i], kd[i], FF[i] * sign[i])
+            k = kp[i] * RAMP_KP_SCALE if ramp_kp else kp[i]
+            mv.motor_mit_cmd(target[i] * sign[i], 0.0, k, kd[i], FF[i] * sign[i])
 
     def ramp_to(j_idx, q_end, seconds):
         """从当前 target 线性斜坡到 q_end（只动 j_idx），期间持续发帧。"""
@@ -231,8 +257,15 @@ def main():
             out.append((q, tl))
         return out
 
+    class TiltAbort(RuntimeError):
+        pass
+
     def settle_measure(j_idx):
-        """等稳并测一次。返回 (q_avg, tilt_mean, status, spread, rate)。"""
+        """等稳并测一次。返回 (q_avg, tilt_mean, status, spread, rate)。
+
+        ⚠️ 机身倾角超过 --tilt-abort 时【抛异常立刻中止】—— 落地测试的安全阀。
+           倾倒时关节角看不出（腿相对机身的角度不变），只有 IMU 能看出来。
+        """
         time.sleep(args.settle)
         q_avg = tilt_mean = spread = rate = float("nan")
         waited = 0.0
@@ -246,6 +279,9 @@ def main():
             rate = (qs[-1] - qs[0]) / dt if dt > 0 else 0.0
             if tls:
                 tilt_mean = sum(tls) / len(tls)
+                if max(tls) > args.tilt_abort:
+                    raise TiltAbort(
+                        f"机身倾角 {max(tls):.1f}° > {args.tilt_abort}° —— 立刻中止并失能")
             if abs(rate) > DRIFT_TOL:
                 status = "在漂"
             elif spread > OSC_TOL:
@@ -426,12 +462,35 @@ def main():
         return 0
 
     try:
-        # 起点：回到默认位
-        print("→ 回默认位…")
+        # ⭐ 软启动：从【当前实测位置】插值到默认位，而不是直接发默认位。
+        #   接管时腿可能是垂着的（节点刚失能），阶跃会让腿甩一下。
+        #   与节点 reset_joints 同款：4 秒 + kp/2.5。
+        cur = [motors[i][1].get_motor_pos() * sign[i] for i in range(joint_num)]
+        dev = max(abs(cur[i] - q_def[i]) for i in range(joint_num))
+        if dev > 0.02:
+            print(f"→ 软启动：当前位置偏离默认位最大 {dev:.3f} rad，4 秒插值过去（kp/2.5）…")
+            ramp_kp = True
+            n_ramp = int(4.0 * FRAME_HZ)
+            for k in range(n_ramp + 1):
+                for i in range(joint_num):
+                    target[i] = cur[i] + (q_def[i] - cur[i]) * k / n_ramp
+                send_once()
+                time.sleep(1.0 / FRAME_HZ)
+            ramp_kp = False
+        else:
+            print("→ 已在默认位附近（偏离 %.3f rad），无需软启动" % dev)
         for j in range(joint_num):
             target[j] = q_def[j]
         hold_and_sample(2.0)
         print(f"{GRN}✓ 已在默认位{RST}\n")
+
+        if args.hold_seconds > 0:
+            print(f"→ 保持默认位 {args.hold_seconds:.0f} 秒 —— "
+                  f"趁这段时间停止 inference 节点 / 把机器人放到地上…")
+            for _ in range(int(args.hold_seconds * FRAME_HZ)):
+                send_once()
+                time.sleep(1.0 / FRAME_HZ)
+            print(f"{GRN}✓ 保持结束，开始扫描{RST}\n")
 
         for j_idx in todo:
             jname = f"{'l' if j_idx < 5 else 'r'}{NAMES[j_idx % 5]}"
@@ -440,9 +499,16 @@ def main():
             # ⚠️ 不要逐点 clamp —— 那会把靠近限位的两个点夹成同一个值（2026-09-21 踩过）。
             m = 0.05
             lo_ok, hi_ok = lo + m, hi - m
-            span = (hi_ok - lo_ok) * 0.80
-            c = max(lo_ok + span / 2, min(hi_ok - span / 2, q_def[j_idx]))
-            pts = [c - span / 2 + span * k / max(1, args.n - 1) for k in range(args.n)]
+            if args.span is not None:
+                span = min(args.span, hi_ok - lo_ok)
+                c = q_def[j_idx]            # 以默认位为中心，不平移
+            else:
+                span = (hi_ok - lo_ok) * 0.80
+                c = max(lo_ok + span / 2, min(hi_ok - span / 2, q_def[j_idx]))
+            if args.n <= 1:
+                pts = [c]                   # ⚠️ 单点必须取中点：原式 n=1 会落到左边缘
+            else:
+                pts = [c - span / 2 + span * k / (args.n - 1) for k in range(args.n)]
             print(f"=== {jname}  (默认 {q_def[j_idx]:+.3f}, 限位 [{lo:+.3f}, {hi:+.3f}], "
                   f"Kp={kp[j_idx]:.1f}, 扫 [{pts[0]:+.3f}, {pts[-1]:+.3f}])")
             print(f"{'目标':>9}{'τ_low':>10}{'τ_high':>10}{'τ_load':>10}{'F':>9}"
@@ -497,6 +563,8 @@ def main():
 
     except KeyboardInterrupt:
         print(f"\n{YEL}⚠️  用户中断 —— 回默认位并失能{RST}")
+    except TiltAbort as exc:
+        print(f"\n{RED}🛑 {exc}{RST}")
     finally:
         # 无论如何都回默认位 + 失能
         try:
@@ -509,6 +577,20 @@ def main():
             pass
         safe_deinit(motors)
         print(f"{GRN}✓ 已回默认位并失能{RST}")
+
+    # ⚠️ 落地安全：扫完后默认【保持站立】，不是立刻失能
+    if args.hold_after > 0 and records:
+        print(f"\n{RED}⚠️  机器人还站着！先收紧吊带把它吊起来。{RST}")
+        print(f"   脚本会继续保持 PD 站立 {args.hold_after:.0f} 秒。"
+              f"之后自动回默认位并失能 —— 那时腿会松掉，请确保吊带已承重。")
+        try:
+            for k in range(int(args.hold_after * FRAME_HZ)):
+                send_once()
+                time.sleep(1.0 / FRAME_HZ)
+                if k % int(10 * FRAME_HZ) == 0 and k:
+                    print(f"   …还剩 {args.hold_after - k/FRAME_HZ:.0f} 秒")
+        except KeyboardInterrupt:
+            print("\n  收到 Ctrl+C —— 回默认位并失能")
 
     # 落盘
     ok = [r for r in records if r["status"] == "ok"]

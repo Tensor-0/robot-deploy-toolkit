@@ -1,0 +1,47 @@
+{
+  "schema": "dm10-zeroing-record/1",
+  "date": "2026-09-17",
+  "operator_note": "用户目视直腿姿态；机器人吊架悬挂、电机使能前为失能可自由摆位",
+  "method": "逐台 set_motor_zero()（把当前姿态写进电机硬件零点，不可逆）",
+  "tool": "robot-deploy-toolkit/scripts/probe_set_zero_all.py --confirm",
+  "pose": {
+    "name": "直腿（两腿完全伸直）",
+    "equals_model_pose": "qpos = 0（所有关节角为 0）",
+    "evidence": "UniLab 渲染 _pose_qpos0_allzero_{front,side,iso,top}.png 与现场照片对照一致"
+  },
+  "base_readings_before_zeroing_deg": {
+    "can1_5_左腿髋pitch": 1.41,
+    "can1_4_左腿髋roll": 68.14,
+    "can1_3_左腿髋yaw": -123.17,
+    "can1_2_左腿膝": -0.89,
+    "can1_1_左腿踝": -2.76,
+    "can2_5_右腿髋pitch": -1.50,
+    "can2_4_右腿髋roll": 1.45,
+    "can2_3_右腿髋yaw": 181.42,
+    "can2_2_右腿膝": 86.67,
+    "can2_1_右腿踝": 0.27
+  },
+  "results": [
+    {"seq": 1, "bus": "can1", "motor_id": 5, "joint": "左腿 髋pitch", "before_deg": 1.41,   "after_deg": -0.01, "ok": true},
+    {"seq": 2, "bus": "can1", "motor_id": 4, "joint": "左腿 髋roll",  "before_deg": 68.14,  "after_deg": -0.01, "ok": true},
+    {"seq": 3, "bus": "can1", "motor_id": 3, "joint": "左腿 髋yaw",   "before_deg": -123.17,"after_deg": -0.01, "ok": true},
+    {"seq": 4, "bus": "can1", "motor_id": 2, "joint": "左腿 膝",      "before_deg": -0.89,  "after_deg": -0.01, "ok": true},
+    {"seq": 5, "bus": "can1", "motor_id": 1, "joint": "左腿 踝",      "before_deg": -2.76,  "after_deg": -0.01, "ok": true},
+    {"seq": 6, "bus": "can2", "motor_id": 5, "joint": "右腿 髋pitch", "before_deg": -1.50,  "after_deg": -0.01, "ok": true},
+    {"seq": 7, "bus": "can2", "motor_id": 4, "joint": "右腿 髋roll",  "before_deg": 1.45,   "after_deg": -0.01, "ok": true},
+    {"seq": 8, "bus": "can2", "motor_id": 3, "joint": "右腿 髋yaw",   "before_deg": 181.42, "after_deg": -0.01, "ok": true},
+    {"seq": 9, "bus": "can2", "motor_id": 2, "joint": "右腿 膝",      "before_deg": -0.01,  "after_deg": -0.01, "ok": true},
+    {"seq": 10,"bus": "can2", "motor_id": 1, "joint": "右腿 踝",      "before_deg": 0.27,   "after_deg": -0.01, "ok": true}
+  ],
+  "verification": {
+    "independent_reread": "robot-deploy-toolkit/scripts/sample_motors.py（不走点零脚本）",
+    "max_residual_deg": 0.01,
+    "motor_quantization_deg": 0.088,
+    "note": "残留 0.01° 小于量化步长，已达硬件极限；远优于精度目标 ±1.1°(±0.02 rad)"
+  },
+  "notes": [
+    "⚠️ 被消除的偏差里，68°/123°/181°/87° 四台是「装配时看不出正不正」的关节（髋 roll/yaw、右膝），此前从未量过。",
+    "⚠️ 点零是【把当前姿态记为 0】，不可逆。若日后发现姿态定义有误，只能重新点。",
+    "⚠️ 电机的 0 现在 = 直腿。若改用「屈膝 home」为零位约定，需相应改 joint_default_angle 或写 motor_zero_offset。"
+  ]
+}

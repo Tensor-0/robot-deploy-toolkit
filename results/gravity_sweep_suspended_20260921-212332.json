@@ -1,0 +1,45 @@
+{
+  "schema": "dm10-gravity-sweep/1",
+  "created": "2026-09-21T21:23:32.988755",
+  "config": "/home/sunrise/roboparty_deploy/src/inference/robots/dm10/robot.yaml",
+  "condition": "suspended (hoist on torso) — NOT ground contact",
+  "note": "tau_g(q) = Kp × (q_des − q) at rest; includes friction/cable, not just gravity",
+  "params": {
+    "ramp_s": 3.0,
+    "settle_s": 5.0,
+    "tilt_max_deg": 3.0,
+    "n_points": 3
+  },
+  "records": [
+    {
+      "joint": "lknee",
+      "joint_index": 3,
+      "q_des": -0.25,
+      "q_meas": -0.202388,
+      "err": -0.047612,
+      "tau": -0.857015,
+      "tilt_max_deg": 6.312,
+      "status": "超时"
+    },
+    {
+      "joint": "lknee",
+      "joint_index": 3,
+      "q_des": 0.8,
+      "q_meas": 0.750172,
+      "err": 0.049828,
+      "tau": 0.89691,
+      "tilt_max_deg": 4.251,
+      "status": "超时"
+    },
+    {
+      "joint": "lknee",
+      "joint_index": 3,
+      "q_des": 1.86248,
+      "q_meas": 1.787022,
+      "err": 0.075458,
+      "tau": 1.35824,
+      "tilt_max_deg": 3.167,
+      "status": "超时"
+    }
+  ]
+}

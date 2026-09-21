@@ -1,0 +1,67 @@
+{
+  "schema": "dm10-limit-check-record/2",
+  "date": "2026-09-17",
+  "revision": "v2 —— 修正了 v1 的【语义错误】（v1 没乘 motor_sign，测的方向是错的）",
+  "why": "HANDOFF 过关判据第 3 条：每个关节在软限位内都能自由转动、不撞硬限位",
+
+  "critical_fix_vs_v1": {
+    "what_was_wrong": "v1 把【配置限位的数值】直接当【电机坐标系指令】下发，没有乘 motor_sign。",
+    "consequence": "对 motor_sign=−1 的关节，实际跑到【相反方向】，测的根本不是配置的那个限位。典型：右膝被当成『+2.206 上限』测，而实际关节角是 −2.206（往屁股方向）。",
+    "how_noticed": "操作员指出『跑限位检查时，右边 ID2 的电机是大幅度向前、小幅度向后』—— 与 v1 记录的方向描述矛盾。",
+    "fix": "目标值改为：电机指令 = 关节角目标 × motor_sign（与生产路径 robot_interface.cpp:389 一致）",
+    "lesson": "⭐ 凡是『关节角 ↔ 电机指令』的换算，必须显式过 motor_sign；实测才能验证语义是否对。"
+  },
+
+  "method": {
+    "tool": "robot-deploy-toolkit/scripts/probe_direction.py --toward-limit both",
+    "command": "python3 scripts/probe_direction.py --all --toward-limit both --ramp 2 --settle-limit 3 --confirm",
+    "procedure": [
+      "① 已验证的使能时序：unlock → set_mode(MIT)【失能态下】→ lock → 保持2s 校验 err==1",
+      "② 读基准 q0",
+      "③ 关节角目标 = 配置限位 ∓ 余量；⭐ 电机指令 = 关节角目标 × motor_sign",
+      "④ kp=20/kd=3，2s 平滑插值走到目标（不阶跃）",
+      "⑤ 停 3s 后采样位置/力矩",
+      "⑥ 三条判据全过才算「到达」：位置真的移动 / 力矩超噪声 / 自解 err 无故障(8~15)"
+    ],
+    "adaptive_margin": "窄行程方向自动收小余量 = max(0.03, min(0.15, 该方向行程×20%))，否则目标离起点太近、测不到东西（例：右膝『往前伸』行程仅 17.2°，固定余量 0.15 时只走到 4.0°）",
+    "sign_semantics": "电机指令 = 关节角目标 × motor_sign（robot_interface.cpp:389）"
+  },
+
+  "verdict": "10/10 通过 —— 全部关节两个方向都能走到配置限位附近、有出力、无故障码",
+
+  "results": [
+    {"joint": "左 髋pitch", "bus": "can1", "motor_id": 5, "motor_sign": 1,  "limits_cfg": [-1.05, 1.05],   "delta_lo": -0.798, "delta_hi": 0.779, "tau_lo": -2.43, "tau_hi": 2.58, "err": 1},
+    {"joint": "左 髋roll",  "bus": "can1", "motor_id": 4, "motor_sign": -1, "limits_cfg": [-0.52, 0.785],  "delta_lo": 0.269, "delta_hi": -0.569, "tau_lo": 2.41, "tau_hi": -2.22, "err": 1},
+    {"joint": "左 髋yaw",   "bus": "can1", "motor_id": 3, "motor_sign": -1, "limits_cfg": [-0.52, 0.785],  "delta_lo": 0.363, "delta_hi": -0.657, "tau_lo": 0.53, "tau_hi": -0.62, "err": 1},
+    {"joint": "左 膝",      "bus": "can1", "motor_id": 2, "motor_sign": 1,  "limits_cfg": [-0.3, 2.3562],  "delta_lo": -0.229, "delta_hi": 2.124, "tau_lo": -0.69, "tau_hi": 1.73, "err": 1},
+    {"joint": "左 踝",      "bus": "can1", "motor_id": 1, "motor_sign": 1,  "limits_cfg": [-1.047, 0.3],   "delta_lo": -0.903, "delta_hi": 0.203, "tau_lo": -0.61, "tau_hi": 0.55, "err": 1},
+    {"joint": "右 髋pitch", "bus": "can2", "motor_id": 5, "motor_sign": -1, "limits_cfg": [-1.05, 1.05],   "delta_lo": 0.735, "delta_hi": -0.818, "tau_lo": 2.65, "tau_hi": -2.78, "err": 1},
+    {"joint": "右 髋roll",  "bus": "can2", "motor_id": 4, "motor_sign": -1, "limits_cfg": [-0.785, 0.52],  "delta_lo": 0.508, "delta_hi": -0.336, "tau_lo": 2.21, "tau_hi": -2.14, "err": 1},
+    {"joint": "右 髋yaw",   "bus": "can2", "motor_id": 3, "motor_sign": -1, "limits_cfg": [-0.785, 0.52],  "delta_lo": 0.579, "delta_hi": -0.439, "tau_lo": 0.62, "tau_hi": -0.59, "err": 1},
+    {"joint": "右 膝",      "bus": "can2", "motor_id": 2, "motor_sign": -1, "limits_cfg": [-0.3, 2.3562],  "delta_lo": 0.184, "delta_hi": -2.168, "tau_lo": 0.91, "tau_hi": -1.57, "err": 1,
+     "note": "专项复测两次（分方向各一次）：往屁股(hi) −123.08°，往前伸(lo) 12.46°。用户点名重点关注此电机。"},
+    {"joint": "右 踝",      "bus": "can2", "motor_id": 1, "motor_sign": -1, "limits_cfg": [-1.047, 0.3],   "delta_lo": 0.827, "delta_hi": -0.274, "tau_lo": 0.69, "tau_hi": -0.77, "err": 1}
+  ],
+
+  "observations": [
+    "⭐ 左右对称性良好：髋pitch 45.7°/44.6° vs 42.1°/46.9°；膝 13.1°/121.7° vs 10.5°/124.2°；踝 51.7°/11.6° vs 47.4°/15.7° ⇒ 左右机械对称，无异常",
+    "⭐ 膝是两个方向行程差最大的（约 10~13° vs 122~124°）—— 符合膝关节解剖（能弯很多，往前只能一点）",
+    "⚠️ 髋pitch 力矩偏高（2.4~2.8 N·m），髋roll 次之（2.1~2.4）；膝/踝最低（0.5~1.7）",
+    "⚠️ v1 曾报『髋roll 力矩 6.1~6.7 N·m』—— 那是【测错方向】导致（往不该去的方向硬顶）。修正后降到 2.2 ⇒ 反证 v1 的语义是错的",
+    "⚠️ 普遍到不了配置限位本身（差 0.05~0.3 rad）⇒ 真实可用行程比配置值小。不是故障，是阻力/机械渐硬的自然结果",
+    "全程 err=1（使能），无任何故障码 8~15"
+  ],
+
+  "caveats": [
+    "⚠️ 本检查的『方向』语义依赖 motor_sign。若 motor_sign 再改，本次结论需重跑。",
+    "⚠️ 本次未触发软限位保护 —— 因为脚本直接 motor_mit_cmd 下发，绕过了 obs_manager 的越限检查。所以『能走到』不代表『软限位会拦住』。",
+    "⚠️ 软限位代码只检查【实测位置】、不裁剪【下发目标】(见 docs/02-标定 §3.2 缺口1) ⇒ 保护是滞后的。"
+  ],
+
+  "known_issue": {
+    "tool": "scripts/limit_check.py",
+    "status": "⛔ 已知不可用，已加拒绝执行的守卫（可设 LIMIT_CHECK_FORCE=1 强制）",
+    "reason": "kp=0 纯阻尼「扫行程」⇒ 关节根本不动；且 get_error_id() 恒返回 0 ⇒ 看不到故障 ⇒ 报'✓ 限位正常'（假成功）",
+    "evidence": "2026-09-17 实测对照（右膝，同目标）：kp=0 → Δ=+0.0000 rad；kp=20 → Δ=+0.1125 rad（6.45°）"
+  }
+}

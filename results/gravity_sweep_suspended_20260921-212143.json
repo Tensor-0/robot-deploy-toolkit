@@ -1,0 +1,14 @@
+{
+  "schema": "dm10-gravity-sweep/1",
+  "created": "2026-09-21T21:21:43.938821",
+  "config": "/home/sunrise/roboparty_deploy/src/inference/robots/dm10/robot.yaml",
+  "condition": "suspended (hoist on torso) — NOT ground contact",
+  "note": "tau_g(q) = Kp × (q_des − q) at rest; includes friction/cable, not just gravity",
+  "params": {
+    "ramp_s": 3.0,
+    "settle_s": 5.0,
+    "tilt_max_deg": 3.0,
+    "n_points": 9
+  },
+  "records": []
+}

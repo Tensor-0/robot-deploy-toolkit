@@ -1,0 +1,59 @@
+{
+  "schema": "dm10-can-interface-change/1",
+  "date": "2026-09-17",
+  "what_changed": "CAN 接口名从 can1/can2 改为 can0/can1，并禁用了板载 CAN",
+
+  "why": {
+    "root_cause": "板载 CAN（spi5.0 tcan4x5x）启动时先抢占 `can0` 号，随后被 udev 规则改名成 `can4` 并把 can0 释放（dmesg: `spi5.0 can4: renamed from can0`）。若 USB CAN 适配器在【释放之前】枚举，它就只能拿到 can1/can2 —— 接口名取决于这个时序竞争。",
+    "evidence": "dmesg 时间线：6.43s 板载初始化拿 can0 → 6.59s 改名为 can4 → 6.74s USB 适配器出现时拿到 can1/can2。而 09-17 晚重插后 USB 拿到 can0/can1。",
+    "authority": "达妙官方手册 DM-USB2CANFD_Dual 模块使用说明书 V1.0（第 12-13 页）明确：该模块两通道在 Linux 下就是 can0 和 can1。本机 DEPLOY_STATUS.md 记录的原始设计也是 can0/can1。"
+  },
+
+  "changes": [
+    {
+      "what": "robot.yaml 的 motor_interface",
+      "from": ["can1", "can2"],
+      "to": ["can0", "can1"],
+      "file": "roboparty_deploy/src/inference/robots/dm10/robot.yaml:60",
+      "backup": "robot.yaml.bak-caniface-<时间戳>"
+    },
+    {
+      "what": "禁用板载 CAN service",
+      "how": "systemctl disable can4.service（并 stop）",
+      "reason": "用不到板载 CAN，禁用后 can0 号不再被抢",
+      "backup": "/etc/systemd/system/can4.service.bak-20260917-221224"
+    },
+    {
+      "what": "注释板载 CAN udev 规则",
+      "how": "注释 /etc/udev/rules.d/98-onboard-can.rules 里的 NAME=\"can4\" 行",
+      "backup": "/etc/udev/rules.d/98-onboard-can.rules.bak-20260917-221224"
+    },
+    {
+      "what": "probe_direction.py 的 ORDER 表：写死接口 → 从 robot.yaml 读",
+      "reason": "⚠️ 写死的表在接口改名后给出错误提示（『配置里没有 can0 ID=2』），险些让我把『配置正确』误判成『配置反了』（今天第 11 个错）",
+      "file": "robot-deploy-toolkit/scripts/probe_direction.py"
+    }
+  ],
+
+  "verification": {
+    "method": "端到端：走生产路径（从 robot.yaml 读 motor_sign 并乘进下发值），给某接口的 ID=2（膝）发指令，操作员目视确认是哪条腿",
+    "results": [
+      {"interface": "can1", "motor_id": 2, "config_says": "右腿 膝", "observed": "右腿", "pass": true},
+      {"interface": "can0", "motor_id": 2, "config_says": "左腿 膝", "observed": "左腿", "pass": true}
+    ],
+    "conclusion": "motor_interface: [\"can0\",\"can1\"] 正确（入口0=can0=左、入口1=can1=右），与 motor_id/motor_sign 的索引顺序一致"
+  },
+
+  "physical_mapping": {
+    "module": "DM-USB2FDCAN Dual（一个 USB 设备、两通道）",
+    "CH1": "can0（左腿）",
+    "CH2": "can1（右腿）",
+    "usb_port": "1-1.2",
+    "note": "⚠️ 换 USB 口或改接法后，必须重做『哪条接口是哪条腿』的差分验证 —— 软件无法自动判断（两条腿的电机 ID 完全相同 1-5）"
+  },
+
+  "caveats": [
+    "⚠️ 接口名仍有漂移可能（若板载 CAN 被重新启用、或 USB 枚举顺序异常）。开机后建议跑一次 sample_motors.py 快速核对。",
+    "⚠️ 本机 rdk-x5-config 仓库（Tensor-0, private）里可能有同份 udev 规则 —— 若 git pull 会覆盖这次的注释改动，需注意。"
+  ]
+}

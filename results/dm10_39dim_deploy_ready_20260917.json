@@ -1,0 +1,81 @@
+{
+  "schema": "dm10-39dim-policy-deploy-ready/1",
+  "date": "2026-09-17",
+  "why": "让现成的 39 维策略（dm10_joystick_flat）能正确部署 —— 不需要重训、不需要写 base_lin_vel 估计器",
+
+  "background": {
+    "decision": "走『甲路』：上机跑现成 39 维策略",
+    "why_39_not_65": "65 维运动跟踪策略缺 base_lin_vel 观测源（消融显示置 0 崩 −57%，喂参考值也崩 −55%，但滞后一步真值只 −2.5% n.s.）。39 维的 dm10_joystick_flat 观测源齐全，可直接部署。",
+    "ablation_report": "logs/g1_ablation/REPORT.txt（3 策略 × 4 seed，绑定自检全 ✅）"
+  },
+
+  "issues_found_and_fixed": [
+    {
+      "id": "A1",
+      "issue": "板子的 default.yaml 是【改前】版本 —— 今天上午修的 obs 顺序从未同步过去",
+      "severity": "🔴 上机必踩（39 维总数相同，静默错位，运行时不会报错）",
+      "evidence": "训练侧 src/unilab/conf/ppo/task/dm10_joystick_flat/base.yaml:41 的 policy.terms 顺序逐字提取为 base_ang_vel → projected_gravity → joint_pos → joint_vel → actions → command",
+      "before": "板子: \"ang_vel:3, gravity_b:3, cmd_vel:3, dof_pos:10, dof_vel:10, last_action:10\"  ← 错位",
+      "after":  "正确: \"ang_vel:3, gravity_b:3, dof_pos:10, dof_vel:10, last_action:10, cmd_vel:3\"",
+      "backup": "board: default.yaml.bak-obsorder-20260917-223706"
+    },
+    {
+      "id": "A2",
+      "issue": "板子的 policy.onnx（39 维）没有 obs_manifest.json ⇒ 无法自动校验",
+      "fix": "用 _dump_obs_manifest.py --algo ppo --task dm10_joystick_flat/base 生成（只 compose 配置，不训练，~15s）",
+      "result": "obs_dim=39, terms=6, signature=base_ang_vel:3|projected_gravity:3|joint_pos:10|joint_vel:10|actions:10|command:3",
+      "deployed_to": "board: robots/dm10/models/obs_manifest.json"
+    },
+    {
+      "id": "A3",
+      "issue": "需要证明防呆机制真的能拦住这个 bug",
+      "fix": "check_contract.py 双向验证",
+      "result": {
+        "new_config": "✅ PASS（顺序/维度/可得性三项一致）",
+        "old_config": "🔴 DENY（抓出顺序错位）"
+      }
+    },
+    {
+      "id": "A4",
+      "issue": "act_alpha = 1.0 ⇒ 平滑机制是 no-op（inference_node.cpp:260 的 last_act_ = α·act + (1−α)·last_act_）",
+      "reference": "docs/09-参考/参数速查表.md:173 建议 0.7~0.9",
+      "fix": "改为 0.8（取上限，离 1.0 最近，因为策略是在 α=1.0 下训的）",
+      "backup": "default.yaml.bak-actalpha-<时间戳>"
+    },
+    {
+      "id": "A5",
+      "issue": "需要端到端证明配置真的被加载（不是磁盘上有、运行时用旧的）",
+      "fix": "用 launch 文件干跑（⚠️ 直接 ros2 run 会 fallback 到 robots/rpo/models/policy.onnx 并报 780 vs 39 不匹配）",
+      "result": "无 FATAL；policy_model_path 指向 dm10 模型；并从【运行中的节点】读回参数：obs_layouts=正确顺序、act_alpha=0.8、joint_num=10"
+    }
+  ],
+
+  "verification_chain": [
+    "① A1 diff 板子 vs 本地 = 逐字一致",
+    "② A2 manifest JSON 合法、obs_dim=39、6 段 signature",
+    "③ A3 新配置 PASS / 旧配置 DENY（反向验证防呆有效）",
+    "④ A4 同步后重新校验 yaml",
+    "⑤ A5 干跑无 FATAL + ⭐从运行中的节点读回参数（不只看文件）"
+  ],
+
+  "board_state_after": {
+    "robot_name": "dm10",
+    "policy_model_path": "robots/dm10/models/policy.onnx（39 维，[1,39]→[1,10]）",
+    "obs_manifest": "robots/dm10/models/obs_manifest.json（39 维）",
+    "configs/default.yaml": "obs_layouts 已修正 + act_alpha=0.8",
+    "robot.yaml": "motor_id=[5,4,3,2,1,5,4,3,2,1], motor_interface=[can0,can1], motor_sign=[1,-1,-1,1,1,-1,-1,-1,-1,-1]",
+    "note": "『能正确跑 39 维策略』的前提已具备"
+  },
+
+  "must_know_before_robot_test": [
+    "⚠️ 出事时没有中间档：所有保护都是 FATAL → rclcpp::shutdown() → 失能（obs_manager.cpp:203-207 跌倒检测、:225-231 越限）⇒ 机器人会【瘫软】。吊着没事，落地会摔。",
+    "⚠️ 板上 policy.onnx 的来源不明：md5(359395ad…) 匹配不到任何本地文件，【不是】memory 记录的『最佳』(2026-09-09_00-52-12, md5 0bef194c…)。只影响可追溯性，不影响能否运行。",
+    "⚠️ 7 个安全缺口全未修（见 docs/09-参考/已知限制.md）：IMU 掉线使跌倒保护失效 / 无 PD 站立保底 / 电机错误码不消费 / 温度不监控 / CAN 死总线无检测 / 推理超时无保护 / 下发目标不裁剪到限位"
+  ],
+
+  "not_done": {
+    "B_policy_selection": "09-09 那批有 20 个 39 维策略，_measure_gait.py 可评估。但 memory 教训『指标好看≠观感好』⇒ 挑选可能需看渲染。本次先拿板上现有的上机（第一次上机是验证流程，不是验证性能）。",
+    "retrain": "不做（39 维不需要）",
+    "estimator": "不做（39 维不需要）"
+  }
+}

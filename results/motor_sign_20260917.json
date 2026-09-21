@@ -1,0 +1,196 @@
+{
+  "schema": "dm10-motor-sign-record/1",
+  "date": "2026-09-17",
+  "method": {
+    "tool": "robot-deploy-toolkit/scripts/probe_direction.py --one-way <±1> --hold-view <s>",
+    "procedure": [
+      "① 失能态读基线（只读）",
+      "② 使能：unlock → set_motor_control_mode(MIT)【必须在失能态下切】→ lock → 保持2s并自解反馈校验 err==1",
+      "③ 以当前实测位置为基准 q0（不用 0 —— 该关节静止位不是 0）",
+      "④ 目标 = q0 + assumed_sign × amplitude，持续下发(50ms周期)并采样",
+      "⑤ 保持不动 15~30 秒，操作员目视确认运动方向",
+      "⑥ 回位到 q0，失能"
+    ],
+    "judgement": "给【电机坐标系 +a】命令，观察物理效果，与模型期望比：一致 ⇒ +1，相反 ⇒ −1。⚠️ 判据用【最朴素的物理描述】（往屁股/往前、伸/收、压/抬、外张/内收），不做『顺/逆时针』这类换算 —— 本轮实践证明那类换算易错。",
+    "gains": {
+      "kp": 20,
+      "kd": 3,
+      "note": "达妙官方起点值，见 docs/03-单关节稳停"
+    },
+    "amplitude_rad": "0.15~0.25（视关节限位余量）",
+    "reconfirmed_utc": "2026-09-17T20:40",
+    "reconfirm_method": "10 台逐一、每次只做一台并保持 12~18 秒；脚本下发 motor_mit_cmd(q0 + AMP)（绕过 motor_sign），操作员用物理词描述方向"
+  },
+  "result": {
+    "motor_sign": [
+      1,
+      -1,
+      -1,
+      1,
+      1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1
+    ],
+    "index_order": "策略关节顺序 l1..l5 = 髋pitch/髋roll/髋yaw/膝/踝, r1..r5 同理",
+    "previous_value": [
+      -1,
+      -1,
+      -1,
+      1,
+      1,
+      -1,
+      -1,
+      -1,
+      -1,
+      -1
+    ],
+    "previous_note": "v1 把 l1(左髋pitch) 填成 −1 ⇒ 左右同号，与模型要求的『镜像』矛盾。靠『motor_sign 左右关系 vs 模型镜像/同向』一致性检验 + 重新逐台目视发现。"
+  },
+  "per_joint": [
+    {
+      "policy_idx": "l1",
+      "bus": "can1",
+      "motor_id": 5,
+      "joint": "左 髋pitch",
+      "part": "hip_pitch",
+      "model_expect": "给正角 → 大腿往后摆",
+      "observed": "大腿【往屁股(后)】",
+      "verdict": "+1",
+      "confidence": "high",
+      "note": "v1 曾填 −1（错）；第二次逐台确认改为 +1",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "l2",
+      "bus": "can1",
+      "motor_id": 4,
+      "joint": "左 髋roll",
+      "part": "hip_roll",
+      "model_expect": "给正角 → 左腿往外张(脚往左移158mm)",
+      "observed": "往内收",
+      "verdict": "-1",
+      "confidence": "high",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "l3",
+      "bus": "can1",
+      "motor_id": 3,
+      "joint": "左 髋yaw",
+      "part": "hip_yaw",
+      "model_expect": "给正角 → 脚俯视逆时针转",
+      "observed": "俯视顺时针",
+      "verdict": "-1",
+      "confidence": "medium",
+      "flag": "⚠️ 判定依赖『转向』而非位移，而转向符号本轮曾被算反一次（rpy 约定）。建议上机前用 IMU 复核。正反向对照已做（+ 顺时针 / − 逆时针，两次相反 ⇒ 操作员确实看到了转向）。",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "l4",
+      "bus": "can1",
+      "motor_id": 2,
+      "joint": "左 膝",
+      "part": "knee",
+      "model_expect": "给正角 → 小腿往后收(屈膝)",
+      "observed": "往后收(向屁股)",
+      "verdict": "+1",
+      "confidence": "high",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "l5",
+      "bus": "can1",
+      "motor_id": 1,
+      "joint": "左 踝",
+      "part": "ankle",
+      "model_expect": "给正角 → 脚尖往下压",
+      "observed": "向下压",
+      "verdict": "+1",
+      "confidence": "high",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "r1",
+      "bus": "can2",
+      "motor_id": 5,
+      "joint": "右 髋pitch",
+      "part": "hip_pitch",
+      "model_expect": "给正角 → 大腿往后摆",
+      "observed": "往前抬",
+      "verdict": "-1",
+      "confidence": "high",
+      "note": "复测 2 次，结论一致",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "r2",
+      "bus": "can2",
+      "motor_id": 4,
+      "joint": "右 髋roll",
+      "part": "hip_roll",
+      "model_expect": "给正角 → 右腿往内收(脚往左移158mm)",
+      "observed": "往外张",
+      "verdict": "-1",
+      "confidence": "high",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "r3",
+      "bus": "can2",
+      "motor_id": 3,
+      "joint": "右 髋yaw",
+      "part": "hip_yaw",
+      "model_expect": "给正角 → 脚俯视逆时针转",
+      "observed": "俯视顺时针",
+      "verdict": "-1",
+      "confidence": "high",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "r4",
+      "bus": "can2",
+      "motor_id": 2,
+      "joint": "右 膝",
+      "part": "knee",
+      "model_expect": "给正角 → 小腿往后收(屈膝)",
+      "observed": "往前伸",
+      "verdict": "-1",
+      "confidence": "high",
+      "note": "复测 4 次，位移 +5.99~+6.47° 稳定可复现",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    },
+    {
+      "policy_idx": "r5",
+      "bus": "can2",
+      "motor_id": 1,
+      "joint": "右 踝",
+      "part": "ankle",
+      "model_expect": "给正角 → 脚尖往下压",
+      "observed": "向上抬",
+      "verdict": "-1",
+      "confidence": "high",
+      "reconfirmed": "2026-09-17 物理描述法复核"
+    }
+  ],
+  "pattern": {
+    "summary": "规律与模型的几何关系【完全自洽】",
+    "knee_hip_pitch_ankle": "左右【异号】：左 +1、右 −1（模型要求『镜像』）✅",
+    "hip_roll_hip_yaw": "左右【同号】：都是 −1（模型要求『同向』）✅",
+    "why": "pitch 类关节在腿的前后平面内（左右互为镜像），roll/yaw 是同向轴（left +X / right +X，left +Z / right +Z）；装配方式跟着轴的几何关系走。"
+  },
+  "open_items": [
+    "✅ 左髋yaw 已用『左右配对对比』复核（两次同侧 ⇒ 与模型一致）",
+    "⚠️ 改配置【未做】端到端验证（需上机跑策略才验证得到）—— 别直接上机",
+    "⚠️ 本次的教训：符号换算极易出错，判据必须用【物理描述】而非【角度约定】；且『motor_sign 左右关系 vs 模型镜像/同向』是一个有效的交叉检验"
+  ],
+  "artifacts": [
+    "robot-deploy-toolkit/results/dm10_model_directions.json （模型期望方向表，三项自洽校验通过）",
+    "UniLab/_dir_compare_all.png （10 关节方向对照图，①–⑩ 中文标注）",
+    "UniLab/_knee_direction.png （右膝 直腿 vs 屈膝 对比）",
+    "roboparty_deploy/src/inference/robots/dm10/robot.yaml.bak-motorsign-20260917-194750 （改前备份）"
+  ],
+  "revision": "v2 —— 2026-09-17 20:40 第二次修正（v1 把 l1 左髋pitch 填错）"
+}

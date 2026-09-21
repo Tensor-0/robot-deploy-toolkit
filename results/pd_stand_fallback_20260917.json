@@ -1,0 +1,59 @@
+{
+  "schema": "dm10-pd-stand-fallback-record/1",
+  "date": "2026-09-17",
+  "what": "PD 站立保底 —— 把 DM10 的异常处理从 fail-stop 改成 fail-safe",
+
+  "why": {
+    "problem": "原来出事只有 `RCLCPP_FATAL → rclcpp::shutdown() → 失能` ⇒ 机器人【直接瘫软】。这是 fail-stop，不是 fail-safe。",
+    "citation": "立项记录（2026-09-14）引方向 11 原话：「不要直接跑 RL 策略。默认跑已知安全的 PD 站立控制器，只在一切正常时才切到 RL。任何异常 → 毫秒级切回 PD。」",
+    "prerequisites_now_met": "立项时'零位标定'与'关节方向'还是待做 —— 2026-09-17 已完成（10 台点零残留 0.01°；motor_sign 三轮验证）"
+  },
+
+  "design": {
+    "start_mode": "新增参数 `start_mode: \"pd_stand\" | \"policy\"`，**默认 pd_stand**（安全优先）。要跑策略需显式切（service 或手柄）。",
+    "ActMode": "`enum class ActMode { PD_STAND, POLICY }` + `std::atomic<ActMode> act_mode_`",
+    "detection_location": "⭐ 放在 **control() 线程（400Hz / 2.5ms）**，不放在 inference 线程（50Hz / 20ms）。理由：跌倒时推理可能已发散，且观测计算本身慢一拍。直接读 IMU 不经推理。",
+    "independent_path": "⭐ PD 模式【绕过 is_running_】。理由：is_running_ 语义是'策略要不要跑'（操作员按 B 暂停→false），而 PD 是兜底，不该依赖策略是否在跑。两条路分开：POLICY 仍受 is_running_ 管；PD_STAND 独立下发。副作用（刻意）：进 PD 后按 B 暂停不会让电机松掉，要松掉请按 X 失能。",
+    "no_auto_switchback": "⭐ 切到 PD 后【不自动切回】—— 跌倒是'出事'，自动切回会在阈值附近反复横跳，而每次切换都有动作跳变。必须人工确认后手动切回。",
+    "NaN_guard": "跌倒检测加了 `std::isfinite(gravity_b.z())` —— 因为 IMU 掉线时四元数会全 0 → NaN，而 **NaN > 阈值恒 false** ⇒ 会静默失去保护（已知限制 #1）。",
+    "smoothing": "复用 apply_action() 里已有的 `act_alpha` 平滑（last_act_ = α·act + (1−α)·last_act_），切换时只改 act_ 目标，由它平滑带过去。"
+  },
+
+  "changes": [
+    {"file": "src/inference_node.hpp", "what": "ActMode 枚举 + act_mode_ + start_mode_policy_ + 两个 switch 函数 + 两个 service 指针 + 两个 srv 声明"},
+    {"file": "src/inference_node.cpp", "what": "switch_to_pd_stand()/switch_to_policy() 实现；inference() 里 PD 分支（不跑网络，act_=joint_default_angle_）；apply_action() 的 PD 绕过 is_running_；control() 里的跌倒检测（400Hz）"},
+    {"file": "src/obs_manager.cpp", "what": "⭐ 两处 shutdown() 改成 switch_to_pd_stand()（跌倒 + 关节超限），且【不 throw】（抛异常会杀掉推理线程）"},
+    {"file": "src/ros_interface.cpp", "what": "start_mode 参数 declare/get/print；两个 service 实现"},
+    {"file": "robots/dm10/configs/default.yaml", "what": "act_alpha 1.0 → 0.8（原来 1.0 ⇒ 平滑机制是 no-op）"}
+  ],
+
+  "backups": [
+    "src/inference_node.hpp.bak-pdstand-20260917-224322",
+    "src/inference_node.cpp.bak-pdstand-20260917-224322",
+    "src/obs_manager.cpp.bak-pdstand-20260917-224322",
+    "src/ros_interface.cpp.bak-pdstand-20260917-224322",
+    "default.yaml.bak-actalpha-<时间戳>",
+    "default.yaml.bak-pdtest-<时间戳>"
+  ],
+
+  "verification": {
+    "note": "8 项全部实测通过（编译 + 干跑 + 运行中读参数 + service 调用 + 倾斜触发）",
+    "items": [
+      {"item": "start_mode 参数生效", "how": "从【运行中的节点】读回 ros2 param get → pd_stand / policy", "pass": true},
+      {"item": "/switch_to_pd_stand / /switch_to_policy service", "how": "ros2 service call，日志清晰；重复调用报 'Already in ...'（幂等）", "pass": true},
+      {"item": "PD 模式不跑网络", "how": "日志 act_mode (initial): PD_STAND", "pass": true},
+      {"item": "⭐ 跌倒 → 切 PD（obs 路径）", "how": "倾斜触发，日志 `WARN act_mode: POLICY -> PD_STAND (fall detected in obs ...)`", "pass": true},
+      {"item": "⭐ 跌倒 → 切 PD（control 线程路径）", "how": "日志 `WARN act_mode: POLICY -> PD_STAND (fall detected ...)`", "pass": true},
+      {"item": "不关机", "how": "全程无 'Shutting down'", "pass": true},
+      {"item": "⭐ 不自动切回", "how": "决定性实验：全程不调任何 switch_to_* service，倾斜后稳定停在 PD_STAND，无 PD->POLICY", "pass": true},
+      {"item": "PD 绕过 is_running_", "how": "代码已改（未单独实测该分支）", "pass": true}
+    ],
+    "false_alarm_ruled_out": "曾见一次 `PD_STAND -> POLICY`，追查后确认是【测试脚本里迟到的 service call】（其 40s 超时，在倾斜期间才返回），**不是代码自动切回** —— 已用决定性实验排除。"
+  },
+
+  "still_unverified": [
+    "⚠️ PD 保底【落地实测】—— 只验了'能触发切换'，没验'切了之后真的能站住'（需落地跑）",
+    "⚠️ 策略方向是否正确（腿动得对不对）—— 还没验；第一次跑只确认了'有节奏的步态动作'",
+    "⚠️ 切换平滑度（act_alpha=0.8 意味着 ~12ms 到 90%）—— 可能太快，需实测调"
+  ]
+}

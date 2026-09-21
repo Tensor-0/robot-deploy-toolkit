@@ -1,0 +1,70 @@
+{
+  "schema": "dm10-preflight-singlejoint-record/1",
+  "date": "2026-09-17",
+  "why": "上机前的最后一道单关节复核 —— 验证【配置本身】，而非仅验证电机原始方向",
+
+  "what_makes_this_different": {
+    "previous_rounds": "所有早期测量（--one-way、物理描述法、限位检查）都是 probe_direction.py 直接 motor_mit_cmd 下发，【绕过了 robot.yaml 的 motor_sign】⇒ 配置写错也测不出来。",
+    "this_round": "从 robot.yaml 读该关节的 motor_sign 并乘进下发值 ⇒ 走的就是【机器人上电后生产路径】的那条链路。",
+    "key_point": "验证的是『策略给关节角 +a 时，机器人实际会做什么』，而不是『电机原始坐标系的正方向朝哪』。",
+    "tool": "robot-deploy-toolkit/scripts/probe_direction.py --use-config-sign",
+    "command": "python3 scripts/probe_direction.py --bus <can> --motor-id <id> --use-config-sign --amplitude 0.25 --one-way 1 --hold-view 20 --confirm"
+  },
+
+  "verdict": "10/10 通过 —— 配置正确，上机时策略的动作语义与模型一致",
+
+  "results": [
+    {"idx": 1,  "joint": "左 髋pitch", "bus": "can1", "motor_id": 5, "motor_sign":  1, "joint_angle_cmd": 0.25, "motor_cmd":  0.2500, "observed": "左大腿往屁股(后)", "model_expect": "脚往【后】160mm（大腿后摆）", "pass": true},
+    {"idx": 2,  "joint": "左 膝",      "bus": "can1", "motor_id": 2, "motor_sign":  1, "joint_angle_cmd": 0.25, "motor_cmd":  0.2500, "observed": "左小腿往屁股(后收/屈膝)", "model_expect": "脚往【后】86mm（屈膝）", "pass": true},
+    {"idx": 3,  "joint": "左 踝",      "bus": "can1", "motor_id": 1, "motor_sign":  1, "joint_angle_cmd": 0.25, "motor_cmd":  0.2500, "observed": "左脚尖下压", "model_expect": "脚尖往下压", "pass": true},
+    {"idx": 4,  "joint": "左 髋roll",  "bus": "can1", "motor_id": 4, "motor_sign": -1, "joint_angle_cmd": 0.25, "motor_cmd": -0.2500, "observed": "左腿外张", "model_expect": "脚往【机器人的左】= 左腿外张", "pass": true},
+    {"idx": 5,  "joint": "左 髋yaw",   "bus": "can1", "motor_id": 3, "motor_sign": -1, "joint_angle_cmd": 0.30, "motor_cmd": -0.3000, "observed": "左脚尖外张", "model_expect": "脚尖往【机器人的左】= 左腿外张", "pass": true},
+    {"idx": 6,  "joint": "右 髋pitch", "bus": "can2", "motor_id": 5, "motor_sign": -1, "joint_angle_cmd": 0.25, "motor_cmd": -0.2500, "observed": "右大腿往屁股(后)", "model_expect": "脚往【后】160mm（大腿后摆）", "pass": true},
+    {"idx": 7,  "joint": "右 膝",      "bus": "can2", "motor_id": 2, "motor_sign": -1, "joint_angle_cmd": 0.25, "motor_cmd": -0.2500, "observed": "右小腿往屁股(后收/屈膝)", "model_expect": "脚往【后】86mm（屈膝）", "pass": true,
+     "note": "用户点名重点关注的电机的 —— 也是限位检查 v1 测错方向的那台。本轮端到端验证：正确。"},
+    {"idx": 8,  "joint": "右 踝",      "bus": "can2", "motor_id": 1, "motor_sign": -1, "joint_angle_cmd": 0.25, "motor_cmd": -0.2500, "observed": "右脚尖下压", "model_expect": "脚尖往下压", "pass": true},
+    {"idx": 9,  "joint": "右 髋roll",  "bus": "can2", "motor_id": 4, "motor_sign": -1, "joint_angle_cmd": 0.25, "motor_cmd": -0.2500, "observed": "右腿内收", "model_expect": "脚往【机器人的左】= 右腿内收", "pass": true},
+    {"idx": 10, "joint": "右 髋yaw",   "bus": "can2", "motor_id": 3, "motor_sign": -1, "joint_angle_cmd": 0.30, "motor_cmd": -0.3000, "observed": "右脚尖内收", "model_expect": "脚尖往【机器人的左】= 右腿内收", "pass": true}
+  ],
+
+  "consistency_check": {
+    "pitch_class": {
+      "joints": ["髋pitch", "膝", "踝"],
+      "motor_sign": "左 +1 / 右 −1（异号）",
+      "physical_effect": "两侧【相同】（都往屁股 / 都下压）",
+      "model_requirement": "镜像 ✓",
+      "verdict": "✅ 自洽"
+    },
+    "roll_yaw_class": {
+      "joints": ["髋roll", "髋yaw"],
+      "motor_sign": "左 −1 / 右 −1（同号）",
+      "physical_effect": "两侧【相反】（左外张 / 右内收）",
+      "model_requirement": "同向（模型里两侧都往机器人的左）✓",
+      "verdict": "✅ 自洽"
+    },
+    "why_it_matters": "这一轮不仅验证了单台，还验证了『motor_sign 的左右关系』与『模型的镜像/同向』一致 —— 这正是第二轮抓出 l1 填错时用的那个交叉检验。现在它两边都测过了。"
+  },
+
+  "final_config": {
+    "file": "roboparty_deploy/src/inference/robots/dm10/robot.yaml:105",
+    "motor_sign": [1, -1, -1, 1, 1, -1, -1, -1, -1, -1],
+    "index_order": "策略关节顺序 l1..l5 = 髋pitch/髋roll/髋yaw/膝/踝, r1..r5 同理",
+    "backups": [
+      "robot.yaml.bak-motorsign-20260917-194750 （最初，改前）",
+      "robot.yaml.bak-motorsign2-20260917-203736 （第二次修正前）"
+    ]
+  },
+
+  "verification_chain": [
+    "1. 第一轮：--one-way 逐台目视 → 定 motor_sign 初值（电机坐标系语义）",
+    "2. 第二轮：物理描述法复测 + 『左右关系 vs 模型镜像/同向』交叉检验 → 修正 l1（曾填错）",
+    "3. 限位检查：10/10 行程可达（并修掉了它的 motor_sign 语义错误）",
+    "4. ⭐ 本轮：--use-config-sign 走完整生产路径 → 10/10，验证配置本身"
+  ],
+
+  "remaining": [
+    "⚠️ 质量/尺寸未实测（12 个 body 仍是仿真猜测值）",
+    "⚠️ 本复核是【单关节、吊装、空载】条件下做的 —— 上机跑策略时的多关节耦合、负载分配、时序仍未验证",
+    "⚠️ 软限位保护只检查实测位置、不裁剪下发目标（docs/02-标定 §3.2 缺口1）"
+  ]
+}

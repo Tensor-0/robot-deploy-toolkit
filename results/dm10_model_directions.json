@@ -1,0 +1,301 @@
+{
+  "schema": "dm10-model-direction/1",
+  "created_utc": "2026-09-17T10:19:14+00:00",
+  "xml": "/home/zhan/UniLab/src/unilab/assets/robots/dm10/scene_flat.xml",
+  "delta_rad": 0.4,
+  "frame": "base_link（机体坐标系；x=前, y=左, z=上）",
+  "sign_convention": "脚相对机体的旋转/位移是【相对基线的变化量】。判定某个 sign 取 +1 还是 −1：把 sign 乘进模型量，看能否复现实测方向。",
+  "model_warning": "左右腿关节轴向量完全相同（不镜像）：髋roll/yaw 给正角时两腿往同一侧倒。这是模型事实，不是接线错误。",
+  "entries": [
+    {
+      "index": 0,
+      "joint": "leg_l1_joint",
+      "short": "l1",
+      "label": "左 髋pitch",
+      "primitive": "hip_pitch",
+      "model_axis": "Y",
+      "model_axis_xyz": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "limit_rad": [
+        -1.05,
+        1.05
+      ],
+      "foot_rot_rpy_deg": [
+        0.0,
+        -22.92,
+        0.0
+      ],
+      "foot_pos_delta_mm": [
+        -160.2,
+        0.0,
+        21.5
+      ],
+      "criterion": "pos_same",
+      "expect": "左右同号"
+    },
+    {
+      "index": 1,
+      "joint": "leg_l2_joint",
+      "short": "l2",
+      "label": "左 髋roll",
+      "primitive": "hip_roll",
+      "model_axis": "X",
+      "model_axis_xyz": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "limit_rad": [
+        -0.52,
+        0.785
+      ],
+      "foot_rot_rpy_deg": [
+        -22.92,
+        -0.0,
+        0.0
+      ],
+      "foot_pos_delta_mm": [
+        0.0,
+        158.1,
+        31.9
+      ],
+      "criterion": "rot_mirrored",
+      "expect": "左右反号(镜像)"
+    },
+    {
+      "index": 2,
+      "joint": "leg_l3_joint",
+      "short": "l3",
+      "label": "左 髋yaw",
+      "primitive": "hip_yaw",
+      "model_axis": "Z",
+      "model_axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "limit_rad": [
+        -0.52,
+        0.785
+      ],
+      "foot_rot_rpy_deg": [
+        0.0,
+        -0.0,
+        -22.92
+      ],
+      "foot_pos_delta_mm": [
+        -1.9,
+        10.5,
+        0.0
+      ],
+      "criterion": "rot_mirrored",
+      "expect": "左右反号(镜像)"
+    },
+    {
+      "index": 3,
+      "joint": "leg_l4_joint",
+      "short": "l4",
+      "label": "左 膝",
+      "primitive": "knee",
+      "model_axis": "Y",
+      "model_axis_xyz": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "limit_rad": [
+        -0.3,
+        2.3562
+      ],
+      "foot_rot_rpy_deg": [
+        0.0,
+        -22.92,
+        0.0
+      ],
+      "foot_pos_delta_mm": [
+        -85.8,
+        0.0,
+        6.5
+      ],
+      "criterion": "pos_same",
+      "expect": "左右同号"
+    },
+    {
+      "index": 4,
+      "joint": "leg_l5_joint",
+      "short": "l5",
+      "label": "左 踝",
+      "primitive": "ankle",
+      "model_axis": "Y",
+      "model_axis_xyz": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "limit_rad": [
+        -1.047,
+        0.3
+      ],
+      "foot_rot_rpy_deg": [
+        0.0,
+        -22.92,
+        0.0
+      ],
+      "foot_pos_delta_mm": [
+        -6.8,
+        0.0,
+        -9.6
+      ],
+      "criterion": "pos_same",
+      "expect": "左右同号"
+    },
+    {
+      "index": 5,
+      "joint": "leg_r1_joint",
+      "short": "r1",
+      "label": "右 髋pitch",
+      "primitive": "hip_pitch",
+      "model_axis": "Y",
+      "model_axis_xyz": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "limit_rad": [
+        -1.05,
+        1.05
+      ],
+      "foot_rot_rpy_deg": [
+        0.0,
+        -22.92,
+        0.0
+      ],
+      "foot_pos_delta_mm": [
+        -160.2,
+        0.0,
+        21.5
+      ],
+      "criterion": "pos_same",
+      "expect": "左右同号"
+    },
+    {
+      "index": 6,
+      "joint": "leg_r2_joint",
+      "short": "r2",
+      "label": "右 髋roll",
+      "primitive": "hip_roll",
+      "model_axis": "X",
+      "model_axis_xyz": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "limit_rad": [
+        -0.785,
+        0.52
+      ],
+      "foot_rot_rpy_deg": [
+        -22.92,
+        -0.0,
+        0.0
+      ],
+      "foot_pos_delta_mm": [
+        0.0,
+        158.0,
+        32.3
+      ],
+      "criterion": "rot_mirrored",
+      "expect": "左右反号(镜像)"
+    },
+    {
+      "index": 7,
+      "joint": "leg_r3_joint",
+      "short": "r3",
+      "label": "右 髋yaw",
+      "primitive": "hip_yaw",
+      "model_axis": "Z",
+      "model_axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "limit_rad": [
+        -0.785,
+        0.52
+      ],
+      "foot_rot_rpy_deg": [
+        0.0,
+        -0.0,
+        -22.92
+      ],
+      "foot_pos_delta_mm": [
+        -2.3,
+        10.5,
+        0.0
+      ],
+      "criterion": "rot_mirrored",
+      "expect": "左右反号(镜像)"
+    },
+    {
+      "index": 8,
+      "joint": "leg_r4_joint",
+      "short": "r4",
+      "label": "右 膝",
+      "primitive": "knee",
+      "model_axis": "Y",
+      "model_axis_xyz": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "limit_rad": [
+        -0.3,
+        2.3562
+      ],
+      "foot_rot_rpy_deg": [
+        0.0,
+        -22.92,
+        0.0
+      ],
+      "foot_pos_delta_mm": [
+        -85.8,
+        0.0,
+        6.4
+      ],
+      "criterion": "pos_same",
+      "expect": "左右同号"
+    },
+    {
+      "index": 9,
+      "joint": "leg_r5_joint",
+      "short": "r5",
+      "label": "右 踝",
+      "primitive": "ankle",
+      "model_axis": "Y",
+      "model_axis_xyz": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "limit_rad": [
+        -1.047,
+        0.3
+      ],
+      "foot_rot_rpy_deg": [
+        0.0,
+        -22.92,
+        0.0
+      ],
+      "foot_pos_delta_mm": [
+        -6.8,
+        0.0,
+        -9.6
+      ],
+      "criterion": "pos_same",
+      "expect": "左右同号"
+    }
+  ]
+}

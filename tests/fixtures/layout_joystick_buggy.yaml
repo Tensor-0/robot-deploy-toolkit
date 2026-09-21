@@ -1,0 +1,6 @@
+# 2026-09-17 实际发生过的 bug：顺序错位（改前的 dm10/configs/default.yaml）
+# 两侧都是 39 维 ⇒ 部署侧只比总元素数 ⇒ 运行时【不会报错】，但语义错乱
+inference_node:
+    ros__parameters:
+        obs_layouts:
+          - "ang_vel:3, gravity_b:3, cmd_vel:3, dof_pos:10, dof_vel:10, last_action:10"

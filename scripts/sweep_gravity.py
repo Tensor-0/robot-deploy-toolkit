@@ -83,6 +83,14 @@ STABLE_WINDOW = 0.5       # 判稳窗口（秒）
 MAX_WAIT = 25.0           # 单点最长等待（秒），超时标 unreliable
 RAMP_KP_SCALE = 1.0 / 2.5 # 软启动期间 kp 缩放（对齐节点 reset_joints 的做法）
 
+# 条件标签 → 写进 JSON 的完整描述。短标签进文件名，完整描述进 condition 字段。
+# ⚠️ 2026-09-21 踩过：这两处原来都【写死】成 suspended，于是落地那次的文件名和
+#    condition 字段都自称「悬吊」—— 文件在说谎，而且读的人没理由去核对。
+CONDITION_TEXT = {
+    "suspended": "suspended (hoist on torso) — NOT ground contact",
+    "grounded": "grounded (feet carrying the robot)",
+}
+
 
 def tilt_deg(quat_wxyz):
     """机身相对竖直的倾角（度）。quat 是 [w,x,y,z]（DM-IMU-L1 的约定）。
@@ -118,7 +126,10 @@ def main():
                          "实测摩擦带 0.5 N·m / Kp=18 ⇒ 0.03 rad，取 0.10 有 3 倍余量")
     ap.add_argument("--settle", type=float, default=5.0, help="到达后先等多久（秒）")
     ap.add_argument("--span", type=float, default=None,
-                    help="扫描跨度（rad）。默认 = 关节行程的 80%。"
+                    # ⚠️ `%%` 不是笔误：argparse 会对 help 文本做 `%` 格式化，
+                    #    单个 `%` 会让【整个 --help 崩掉】（2026-09-21 发现：
+                    #    "unsupported format character '?'" —— 而且只有跑 --help 才暴露）。
+                    help="扫描跨度（rad）。默认 = 关节行程的 80%%。"
                          "⚠️ 落地测试必须给小值（或配 --n 1 只测默认位那一点）")
     ap.add_argument("--tilt-abort", type=float, default=15.0,
                     help="⚠️ 硬阈值：机身倾角超过它【立刻中止并失能】（落地安全阀）")
@@ -133,6 +144,11 @@ def main():
                     help="⚠️ 扫完后【继续保持 PD 站立】N 秒再失能。"
                          "落地测试必须给大值 —— 否则测完立刻失能 = 机器人当场瘫倒。\n"
                          "本脚本跑完会打印提示；按 Ctrl+C 才真正结束。")
+    ap.add_argument("--condition", default="suspended", choices=sorted(CONDITION_TEXT),
+                    help="本次测量的条件标签 —— 同时进【默认输出文件名】和 JSON 的 "
+                         "`condition` 字段。⚠️ 落地测必须显式写 --condition grounded："
+                         "这两处原来都写死 suspended，落地那次因此自称悬吊。"
+                         "加新条件要同时加进 CONDITION_TEXT（见文件顶部）。")
     ap.add_argument("--out", default=None, help="落盘路径")   # ⚠️ 别删：被 replace 吃掉过一次
     ap.add_argument("--dry-run", action="store_true", help="只回默认位，不扫")
     ap.add_argument("--verify-from",
@@ -150,7 +166,7 @@ def main():
     #    在最后一行落盘时才崩】。这里一次性确认所有会用到的属性都在。
     for _a in ("config", "infer_config", "joint", "leg", "n", "ramp", "ramp_short",
                "delta", "settle", "span", "tilt_abort", "tilt_max", "hold_seconds",
-               "hold_after", "out", "dry_run", "verify_from", "track_from", "track_seconds"):
+               "hold_after", "condition", "out", "dry_run", "verify_from", "track_from", "track_seconds"):
         if not hasattr(args, _a):
             raise SystemExit(f"!! 参数自检失败：args.{_a} 不存在 —— argparse 定义被改坏了")
 
@@ -596,14 +612,14 @@ def main():
     ok = [r for r in records if r["status"] == "ok"]
     out = args.out or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "results",
-        f"gravity_sweep_suspended_{datetime.now():%Y%m%d-%H%M%S}.json")
+        f"gravity_sweep_{args.condition}_{datetime.now():%Y%m%d-%H%M%S}.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump({
             "schema": "dm10-gravity-sweep/1",
             "created": datetime.now().isoformat(),
             "config": os.path.abspath(args.config),
-            "condition": "suspended (hoist on torso) — NOT ground contact",
+            "condition": CONDITION_TEXT.get(args.condition, args.condition),
             "note": "tau_g(q) = Kp × (q_des − q) at rest; includes friction/cable, not just gravity",
             "params": {"ramp_s": args.ramp, "settle_s": args.settle,
                        "tilt_max_deg": args.tilt_max, "n_points": args.n},

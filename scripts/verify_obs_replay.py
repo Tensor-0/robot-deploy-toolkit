@@ -44,6 +44,7 @@ def scale_of(meta, key):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--npz", required=True, help="板上 dump_bag.py 导出的 npz")
+    ap.add_argument("--onnx", help="可选：给 chain 检验用（要和 metadata 里的权重指纹一致）")
     args = ap.parse_args()
     d = np.load(args.npz, allow_pickle=True)
 
@@ -158,15 +159,48 @@ def main():
               % (name, size, per_field[name], np.median(a), np.percentile(a, 95),
                  100.0 * float((a < TOL).mean()),
                  "   ← 递归段，非独立" if name == "last_action" else ""))
-    mx = float(worst.max())
+    # 总判定只看【独立重建的段】；last_action 是递归段，由下面的链式检验单独负责
+    indep = np.concatenate([worst[o0:o0 + sz] for n, sz, o0 in fields if n != "last_action"])
+    mx = float(indep.max())
     print()
-    print("总体最大 |diff| = %.3e（判据 %.0e） ⇒ %s"
-          % (mx, TOL, "PASS ✓" if mx < TOL else "FAIL ✗"))
+    print("独立重建段（除 last_action）最大 |diff| = %.3e（判据 %.0e）" % (mx, TOL))
     if mx >= TOL:
-        bad = int(np.argmax(worst))
-        seg = [n for n, s, o0 in fields if o0 <= bad < o0 + s]
-        print("最大差在第 %d 维（%s 段）" % (bad, seg))
-        sys.exit(1)
+        print("  ⇒ FAIL ✗")
+
+    # ---- last_action 的单独检验 ----
+    # 它是【递归段】（= 上一拍的 onnx 输出），无法从原始话题推出，
+    # 所以不能用上面的"原始话题 → obs"那条路。正确的链是：
+    #     onnx(obs[k])  ==  obs[k+1] 的 last_action 段
+    # 因为 /policy_obs 发的就是喂给 onnx 的那份输入。
+    all_pass = mx < TOL
+    la = [o0 for n, sz, o0 in fields if n == "last_action"]
+    if la and args.onnx:
+        import onnxruntime as ort
+        sess = ort.InferenceSession(args.onnx, providers=["CPUExecutionProvider"])
+        iname = sess.get_inputs()[0].name
+        outname = sess.get_outputs()[0].name
+        o0 = la[0]
+        size = [sz for n, sz, _ in fields if n == "last_action"][0]
+        worst = 0.0
+        n_ok = 0
+        for k in range(len(O_obs) - 1):
+            out = sess.run([outname], {iname: O_obs[k][None, :].astype(np.float32)})[0][0]
+            d = float(np.abs(out - O_obs[k + 1][o0:o0 + size].astype(np.float64)).max())
+            worst = max(worst, d)
+            n_ok += int(d < TOL)
+        print()
+        print("last_action 链式检验（onnx(obs[k]) vs obs[k+1]）:")
+        print("  帧数 %d  <1e-6 占比 %.1f%%  最大 |diff| %.3e  ⇒ %s"
+              % (len(O_obs) - 1, 100.0 * n_ok / (len(O_obs) - 1), worst,
+                 "PASS ✓" if worst < TOL else "FAIL ✗"))
+        all_pass = all_pass and worst < TOL
+    elif la:
+        print()
+        print("⚠️ 未给 --onnx ⇒ last_action 段（递归）没验 ⇒ 总判定不算 PASS")
+        all_pass = False
+    print()
+    print("A3 验收（obs 逐帧一致 < 1e-6）⇒ %s" % ("PASS ✓" if all_pass else "FAIL ✗"))
+    sys.exit(0 if all_pass else 1)
 
 
 main()
